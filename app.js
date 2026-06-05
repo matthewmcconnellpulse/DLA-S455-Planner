@@ -25,17 +25,28 @@ const RATE_FIELDS = [
   { key: "officialRate", label: "Official rate of interest", type: "pct", group: "Loan / S455 / BIK", hint: "BIK — reviewed quarterly" },
   { key: "bikThreshold", label: "BIK exemption threshold", type: "money", group: "Loan / S455 / BIK" },
   { key: "class1ARate", label: "Class 1A NIC rate", type: "pct", group: "Loan / S455 / BIK" },
+  { key: "cgtAnnualExempt", label: "CGT annual exempt amount", type: "money", group: "CGT / SDLT" },
+  { key: "cgtResidentialBasic", label: "CGT residential — basic", type: "pct", group: "CGT / SDLT" },
+  { key: "cgtResidentialHigher", label: "CGT residential — higher", type: "pct", group: "CGT / SDLT" },
+  { key: "sdltSurcharge", label: "SDLT additional-dwelling surcharge", type: "pct", group: "CGT / SDLT" },
+  { key: "sdltNonResident", label: "SDLT non-resident surcharge", type: "pct", group: "CGT / SDLT" },
 ];
 
 /* ---- Worked example: the Spanish-property client ------------------------- */
 function exampleScenarios() {
   const blankYear = () => ({ drawdown: 0, dividends: 0, externalRepayment: 0 });
+  // Spanish property purchase: outside SDLT (not England/NI). UK home sale: main
+  // residence, so fully covered by Private Residence Relief (taxable fraction 0).
+  const spanishPurchase = () => ({ year: 1, price: 1000000, applies: false, additionalProperty: true, nonResident: false });
+  const homeDisposal = () => ({ year: 4, proceeds: 1000000, cost: 1000000, expenses: 0, mainResidence: true, taxableFraction: 0 });
   return [
     {
       name: "A · Loan, repay from UK home sale (no extra dividends)",
       note: "Borrow £1m, pay S455 + BIK, repay in full from the house sale in year 4. S455 is refunded.",
       otherIncome: 150000,
       openingLoan: 0,
+      purchase: spanishPurchase(),
+      disposal: homeDisposal(),
       years: [
         { drawdown: 1000000, dividends: 0, externalRepayment: 0 },
         blankYear(),
@@ -48,6 +59,8 @@ function exampleScenarios() {
       note: "Borrow £1m, declare £250k dividends each year to bring down the S455 balance.",
       otherIncome: 150000,
       openingLoan: 0,
+      purchase: spanishPurchase(),
+      disposal: homeDisposal(),
       years: [
         { drawdown: 1000000, dividends: 250000, externalRepayment: 0 },
         { drawdown: 0, dividends: 250000, externalRepayment: 0 },
@@ -60,6 +73,8 @@ function exampleScenarios() {
       note: "No loan. Declare the full £1m as a dividend in year 1 and fund the purchase directly.",
       otherIncome: 150000,
       openingLoan: 0,
+      purchase: spanishPurchase(),
+      disposal: homeDisposal(),
       years: [
         { drawdown: 0, dividends: 1000000, externalRepayment: 0 },
         blankYear(),
@@ -76,6 +91,8 @@ function blankScenario() {
     note: "",
     otherIncome: 150000,
     openingLoan: 0,
+    purchase: { year: 1, price: 0, applies: false, additionalProperty: true, nonResident: false },
+    disposal: { year: 4, proceeds: 0, cost: 0, expenses: 0, mainResidence: true, taxableFraction: 0 },
     years: [
       { drawdown: 0, dividends: 0, externalRepayment: 0 },
       { drawdown: 0, dividends: 0, externalRepayment: 0 },
@@ -88,12 +105,23 @@ function blankScenario() {
 /* ---- State --------------------------------------------------------------- */
 let state = loadState();
 
+function normaliseScenario(scn) {
+  if (!scn.purchase) scn.purchase = { year: 1, price: 0, applies: false, additionalProperty: true, nonResident: false };
+  if (!scn.disposal) scn.disposal = { year: scn.years ? scn.years.length : 4, proceeds: 0, cost: 0, expenses: 0, mainResidence: true, taxableFraction: 0 };
+  return scn;
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.rates && parsed.scenarios) return parsed;
+      if (parsed && parsed.rates && parsed.scenarios) {
+        // Merge any new default rate keys (e.g. CGT/SDLT added in a later version)
+        parsed.rates = Object.assign(defaultRates(), parsed.rates);
+        parsed.scenarios.forEach(normaliseScenario);
+        return parsed;
+      }
     }
   } catch (e) { /* ignore */ }
   return { rates: defaultRates(), scenarios: exampleScenarios() };
@@ -216,6 +244,35 @@ function renderScenario(scn, idx) {
   });
   body.appendChild(addYearBtn);
 
+  /* property transaction taxes (SDLT on a purchase, CGT on a disposal) */
+  const p = scn.purchase, d = scn.disposal;
+  const prop = document.createElement("details");
+  prop.style.marginTop = "14px";
+  prop.innerHTML = `
+    <summary style="cursor:pointer;font-weight:600;font-size:13.5px">Property transaction taxes — SDLT &amp; CGT (one-off)</summary>
+    <div style="border:1px solid var(--line);border-radius:8px;padding:14px;margin-top:8px">
+      <div style="font-weight:600;margin-bottom:8px">Purchase (SDLT)</div>
+      <p class="muted" style="margin:0 0 10px;font-size:12px">SDLT applies to property in England &amp; Northern Ireland only. A property in Spain is outside SDLT — leave "Located in England/NI" unticked (Spain levies its own transfer tax / VAT, modelled separately).</p>
+      <div class="grid cols-4">
+        <label class="field"><span class="lbl">Purchase price</span><input type="number" data-pbind="price" value="${p.price}" /></label>
+        <label class="field"><span class="lbl">In which year</span><input type="number" data-pbind="year" value="${p.year}" /></label>
+        <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pbind="applies" ${p.applies ? "checked" : ""}/> Located in England/NI</label></label>
+        <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pbind="additionalProperty" ${p.additionalProperty ? "checked" : ""}/> Additional dwelling (+surcharge)</label></label>
+        <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pbind="nonResident" ${p.nonResident ? "checked" : ""}/> Non-UK-resident (+2%)</label></label>
+      </div>
+      <div style="font-weight:600;margin:16px 0 8px">Disposal (CGT)</div>
+      <p class="muted" style="margin:0 0 10px;font-size:12px">Selling the UK home: if it has been the main residence throughout, Private Residence Relief usually means no CGT — keep "Main residence" ticked with taxable fraction 0. For a rental or second home, untick it (or set the taxable fraction).</p>
+      <div class="grid cols-4">
+        <label class="field"><span class="lbl">Sale proceeds</span><input type="number" data-dbind="proceeds" value="${d.proceeds}" /></label>
+        <label class="field"><span class="lbl">Base cost</span><input type="number" data-dbind="cost" value="${d.cost}" /></label>
+        <label class="field"><span class="lbl">Costs of sale</span><input type="number" data-dbind="expenses" value="${d.expenses}" /></label>
+        <label class="field"><span class="lbl">In which year</span><input type="number" data-dbind="year" value="${d.year}" /></label>
+        <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-dbind="mainResidence" ${d.mainResidence ? "checked" : ""}/> Main residence (PRR)</label></label>
+        <label class="field"><span class="lbl">Taxable fraction <span class="hint">(0–1, if not fully PRR)</span></span><input type="number" step="0.01" data-dbind="taxableFraction" value="${d.taxableFraction}" /></label>
+      </div>
+    </div>`;
+  body.appendChild(prop);
+
   /* summary cards */
   const cards = document.createElement("div");
   cards.className = "summary-cards";
@@ -224,19 +281,20 @@ function renderScenario(scn, idx) {
     <div class="card"><div class="k">Permanent tax cost</div>
       <div class="v perm">${gbp(result.netPermanentCost)}</div>
       <div class="note">dividend tax + BIK income tax + Class 1A</div></div>
+    <div class="card"><div class="k">Transaction taxes</div>
+      <div class="v perm">${gbp(result.transactionTaxes)}</div>
+      <div class="note">SDLT ${gbp(result.totals.sdlt)} · CGT ${gbp(result.totals.cgt)}</div></div>
     <div class="card"><div class="k">Peak S455 (refundable)</div>
       <div class="v timing">${gbp(result.peakS455)}</div>
       <div class="note">cash locked up with HMRC at peak</div></div>
-    <div class="card"><div class="k">Total dividends declared</div>
-      <div class="v">${gbp(result.totals.dividends)}</div>
-      <div class="note">div tax ${gbp(result.totals.dividendTax)}</div></div>
-    <div class="card"><div class="k">S455 still outstanding (end)</div>
-      <div class="v">${gbp(result.s455Outstanding)}</div>
-      <div class="note">loan closing ${gbp(result.closingLoan)}</div></div>`;
+    <div class="card"><div class="k">Total non-refundable cost</div>
+      <div class="v perm">${gbp(result.totalNonRefundable)}</div>
+      <div class="note">permanent + SDLT + CGT</div></div>`;
   body.appendChild(cards);
 
   /* detailed per-year results */
   const detail = document.createElement("details");
+  detail.className = "breakdown";
   detail.style.marginTop = "8px";
   detail.innerHTML = `<summary class="muted" style="cursor:pointer;font-size:13px">Year-by-year breakdown</summary>`;
   const detTbl = document.createElement("div");
@@ -252,14 +310,16 @@ function renderScenario(scn, idx) {
       <td>${gbp0(y.dividendTax)}${y.dividends > 0 ? ` <span class="muted">(${pct(y.effectiveDivRate)})</span>` : ""}</td>
       <td>${gbp0(y.s455Liab)}</td>
       <td class="${y.s455Movement > 0 ? "neg" : y.s455Movement < 0 ? "pos" : "muted"}">${y.s455Movement === 0 ? "—" : signed(y.s455Movement)}</td>
-      <td><strong>${gbp(y.permanentCost)}</strong></td>
+      <td>${gbp0(y.sdlt)}</td>
+      <td>${gbp0(y.cgt)}</td>
+      <td><strong>${gbp(y.permanentCost + y.sdlt + y.cgt)}</strong></td>
     </tr>`).join("");
   detTbl.innerHTML = `
     <table class="data">
       <thead><tr>
         <th>Period</th><th>Closing loan</th><th>BIK value</th><th>BIK income tax</th>
         <th>Class 1A</th><th>Dividend tax</th><th>S455 liability</th>
-        <th>S455 cash (+pay/−refund)</th><th>Permanent cost</th>
+        <th>S455 cash (+pay/−refund)</th><th>SDLT</th><th>CGT</th><th>Non-refundable cost</th>
       </tr></thead>
       <tbody>${drows}</tbody>
       <tfoot><tr>
@@ -267,7 +327,8 @@ function renderScenario(scn, idx) {
         <td>${gbp(result.totals.bikIncomeTax)}</td><td>${gbp(result.totals.class1A)}</td>
         <td>${gbp(result.totals.dividendTax)}</td><td></td>
         <td class="muted">paid ${gbp(result.totals.s455Paid)} / ref ${gbp(result.totals.s455Refunded)}</td>
-        <td>${gbp(result.netPermanentCost)}</td>
+        <td>${gbp(result.totals.sdlt)}</td><td>${gbp(result.totals.cgt)}</td>
+        <td>${gbp(result.totalNonRefundable)}</td>
       </tr></tfoot>
     </table>`;
   detail.appendChild(detTbl);
@@ -319,6 +380,22 @@ function renderScenario(scn, idx) {
     });
   });
 
+  // Property transaction tax inputs (purchase = pbind, disposal = dbind)
+  const bindProp = (selector, target) => {
+    root.querySelectorAll(selector).forEach((inp) => {
+      inp.addEventListener("input", (e) => {
+        const field = e.target.dataset.pbind || e.target.dataset.dbind;
+        if (e.target.type === "checkbox") target[field] = e.target.checked;
+        else target[field] = parseFloat(e.target.value) || 0;
+        saveState();
+        refreshScenarioInPlace(root, scn);
+        renderComparison();
+      });
+    });
+  };
+  bindProp("[data-pbind]", scn.purchase);
+  bindProp("[data-dbind]", scn.disposal);
+
   return root;
 }
 
@@ -327,7 +404,7 @@ function renderScenario(scn, idx) {
 function refreshScenarioInPlace(root, scn) {
   const fresh = renderScenario(scn, state.scenarios.indexOf(scn));
   root.querySelector(".summary-cards").replaceWith(fresh.querySelector(".summary-cards"));
-  root.querySelector("details").replaceWith(fresh.querySelector("details"));
+  root.querySelector("details.breakdown").replaceWith(fresh.querySelector("details.breakdown"));
   // update closing-loan column
   const result = runScenario(scn, state.rates);
   root.querySelectorAll("tbody tr[data-yi]").forEach((tr) => {
@@ -344,7 +421,8 @@ function renderComparison() {
   const tbl = document.getElementById("compare");
 
   const minPerm = Math.min(...results.map((x) => x.netPermanentCost));
-  const minTotal = Math.min(...results.map((x) => x.netPermanentCost + x.s455Outstanding));
+  const minNonRef = Math.min(...results.map((x) => x.totalNonRefundable));
+  const minTotal = Math.min(...results.map((x) => x.totalNonRefundable + x.s455Outstanding));
 
   let header = "<thead><tr><th>Scenario</th>";
   results.forEach((x) => { header += `<th>${escapeHtml(x.name)}</th>`; });
@@ -356,9 +434,12 @@ function renderComparison() {
     ["BIK income tax", (x) => gbp(x.totals.bikIncomeTax)],
     ["Employer Class 1A NIC", (x) => gbp(x.totals.class1A)],
     ["Permanent tax cost", (x) => gbp(x.netPermanentCost), (x) => x.netPermanentCost === minPerm],
+    ["SDLT (purchase)", (x) => gbp(x.totals.sdlt)],
+    ["CGT (disposal)", (x) => gbp(x.totals.cgt)],
+    ["Total non-refundable cost", (x) => gbp(x.totalNonRefundable), (x) => x.totalNonRefundable === minNonRef],
     ["Peak S455 (cash locked up)", (x) => gbp(x.peakS455)],
     ["S455 outstanding at end", (x) => gbp(x.s455Outstanding)],
-    ["Permanent + S455 still locked", (x) => gbp(x.netPermanentCost + x.s455Outstanding), (x) => (x.netPermanentCost + x.s455Outstanding) === minTotal],
+    ["Non-refundable + S455 still locked", (x) => gbp(x.totalNonRefundable + x.s455Outstanding), (x) => (x.totalNonRefundable + x.s455Outstanding) === minTotal],
   ];
 
   let bodyHtml = "<tbody>";
@@ -389,10 +470,11 @@ function drawChart(results) {
   const series = results.map((x) => ({
     name: x.name,
     perm: x.netPermanentCost,
+    txn: x.transactionTaxes,
     s455: x.s455Outstanding,
     peak: x.peakS455,
   }));
-  const maxVal = Math.max(1, ...series.map((s) => Math.max(s.perm + s.s455, s.peak)));
+  const maxVal = Math.max(1, ...series.map((s) => Math.max(s.perm + s.txn + s.s455, s.peak)));
   // round axis up to a nice number
   const niceMax = niceCeil(maxVal);
 
@@ -417,17 +499,20 @@ function drawChart(results) {
   series.forEach((s, i) => {
     const cx = padL + groupW * i + groupW / 2;
     const x = cx - barW / 2;
-    // stacked: permanent (red) + S455 outstanding (blue) on top
+    // stacked: permanent (red) + transaction taxes (orange) + S455 outstanding (blue)
     const permH = (s.perm / niceMax) * plotH;
+    const txnH = (s.txn / niceMax) * plotH;
     const s455H = (s.s455 / niceMax) * plotH;
     const baseY = padT + plotH;
 
     ctx.fillStyle = "#b3261e";
     ctx.fillRect(x, baseY - permH, barW, permH);
+    ctx.fillStyle = "#b4690e";
+    ctx.fillRect(x, baseY - permH - txnH, barW, txnH);
     ctx.fillStyle = "#0b5a8a";
-    ctx.fillRect(x, baseY - permH - s455H, barW, s455H);
+    ctx.fillRect(x, baseY - permH - txnH - s455H, barW, s455H);
 
-    // peak S455 marker (hollow outline) to show cash locked up at peak
+    // peak S455 marker (dashed line) to show cash locked up at peak
     const peakH = (s.peak / niceMax) * plotH;
     ctx.strokeStyle = "#1f9d7a";
     ctx.setLineDash([4, 3]);
@@ -438,10 +523,11 @@ function drawChart(results) {
     ctx.setLineDash([]);
 
     // total label
+    const topH = permH + txnH + s455H;
     ctx.fillStyle = "#1c2733";
     ctx.textAlign = "center"; ctx.textBaseline = "bottom";
     ctx.font = "bold 11px -apple-system, Segoe UI, Roboto, sans-serif";
-    ctx.fillText("£" + shortNum(s.perm + s.s455), cx, baseY - permH - s455H - 4);
+    ctx.fillText("£" + shortNum(s.perm + s.txn + s.s455), cx, baseY - topH - 4);
 
     // x label (wrapped)
     ctx.fillStyle = "#5d6b7a";
@@ -453,6 +539,7 @@ function drawChart(results) {
   // legend
   const legend = [
     ["#b3261e", "Permanent tax cost"],
+    ["#b4690e", "Transaction taxes (SDLT/CGT)"],
     ["#0b5a8a", "S455 outstanding at end"],
     ["#1f9d7a", "Peak S455 (cash locked up)"],
   ];

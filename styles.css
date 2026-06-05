@@ -202,6 +202,14 @@ canvas#chart { width: 100%; max-width: 100%; height: auto; }
 
 footer.app-footer { color: var(--muted); font-size: 12px; padding: 24px; text-align: center; }
 
+.cloud-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.cloud-controls select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; font: inherit; min-width: 220px; }
+.cloud-plans { display: flex; flex-direction: column; gap: 8px; }
+.plan-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.plan-row .plan-name { font-weight: 600; }
+.plan-row .plan-actions { margin-left: auto; display: flex; gap: 6px; }
+.cloud-status { margin-top: 10px; font-size: 12.5px; min-height: 1em; }
+
 .muted { color: var(--muted); }
 .right { text-align: right; }
 .nowrap { white-space: nowrap; }

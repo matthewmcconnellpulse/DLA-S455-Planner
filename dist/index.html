@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dividend &amp; Director's Loan (S455) Planner</title>
+  <style>
+:root {
+  --bg: #f4f6f9;
+  --panel: #ffffff;
+  --ink: #1c2733;
+  --muted: #5d6b7a;
+  --line: #dde3ea;
+  --brand: #0b5a8a;
+  --brand-dark: #073f60;
+  --accent: #1f9d7a;
+  --warn: #b4690e;
+  --danger: #b3261e;
+  --soft: #eef3f8;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(20, 40, 60, .08), 0 6px 18px rgba(20, 40, 60, .06);
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+header.app-header {
+  background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+  color: #fff;
+  padding: 22px 28px;
+}
+header.app-header h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: .2px; }
+header.app-header p { margin: 0; opacity: .9; font-size: 13.5px; max-width: 820px; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 22px; }
+
+.disclaimer {
+  background: #fff6e6;
+  border: 1px solid #f0d79a;
+  color: #6b4e12;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 12.5px;
+  margin-bottom: 18px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+  align-items: center;
+}
+.toolbar .spacer { flex: 1; }
+
+button, .btn {
+  font: inherit;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, transform .04s;
+}
+button:hover { background: var(--soft); }
+button:active { transform: translateY(1px); }
+button.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+button.primary:hover { background: var(--brand-dark); }
+button.ghost { background: transparent; }
+button.danger { color: var(--danger); border-color: #e3b6b3; }
+button.danger:hover { background: #fbe9e8; }
+button.small { padding: 4px 9px; font-size: 12.5px; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.panel > .panel-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fbfcfe;
+}
+.panel > .panel-head h2 { margin: 0; font-size: 16px; }
+.panel > .panel-head .sub { color: var(--muted); font-size: 12.5px; }
+.panel > .panel-body { padding: 18px; }
+
+details.panel > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 18px;
+  background: #fbfcfe;
+  font-weight: 600;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+details.panel > summary::-webkit-details-marker { display: none; }
+details.panel > summary::before { content: "▸"; color: var(--brand); }
+details.panel[open] > summary::before { content: "▾"; }
+details.panel > .panel-body { border-top: 1px solid var(--line); }
+
+.grid {
+  display: grid;
+  gap: 14px 18px;
+}
+.grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+label.field { display: block; font-size: 12.5px; color: var(--muted); }
+label.field span.lbl { display: block; margin-bottom: 4px; font-weight: 600; color: var(--ink); }
+label.field .hint { font-weight: 400; color: var(--muted); }
+
+input[type="text"], input[type="number"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: inherit;
+  background: #fff;
+}
+input:focus { outline: 2px solid #bcd9ee; border-color: var(--brand); }
+input[readonly] { background: var(--soft); color: var(--muted); }
+
+.rate-input { position: relative; }
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+table.data th, table.data td {
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data thead th { background: var(--soft); font-size: 12px; color: var(--muted); position: sticky; top: 0; }
+table.data tbody tr:hover { background: #fafcfe; }
+table.data tfoot td { font-weight: 700; border-top: 2px solid var(--line); background: #fbfcfe; }
+table.data td input { padding: 5px 7px; text-align: right; }
+.table-scroll { overflow-x: auto; }
+
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: .3px;
+}
+.tag.perm { background: #fbe9e8; color: var(--danger); }
+.tag.timing { background: #e7f2fb; color: var(--brand); }
+.tag.good { background: #e6f5ef; color: var(--accent); }
+
+.scenario { border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 16px; }
+.scenario > .sc-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; background: #fbfcfe; border-bottom: 1px solid var(--line);
+}
+.scenario > .sc-head input.sc-name { font-weight: 700; font-size: 15px; border: 1px dashed transparent; background: transparent; flex: 1; }
+.scenario > .sc-head input.sc-name:hover { border-color: var(--line); }
+.scenario > .sc-body { padding: 16px; }
+
+.summary-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+.card {
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; background: #fff;
+}
+.card .k { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.card .v { font-size: 22px; font-weight: 700; margin-top: 2px; }
+.card .v.perm { color: var(--danger); }
+.card .v.timing { color: var(--brand); }
+.card .note { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+
+.compare-table td.best { background: #e6f5ef; font-weight: 700; }
+.compare-table .winner-row td { background: #f0f8f4; }
+
+.links-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.link-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.link-card h3 { margin: 0 0 8px; font-size: 14.5px; color: var(--brand-dark); }
+.link-card ul { margin: 0; padding-left: 18px; font-size: 13px; }
+.link-card li { margin-bottom: 6px; }
+.link-card a { color: var(--brand); }
+.link-card .leg { color: var(--muted); font-size: 12px; }
+
+.kpi-row { display: flex; flex-wrap: wrap; gap: 18px; align-items: baseline; font-size: 13px; color: var(--muted); }
+.kpi-row b { color: var(--ink); }
+
+canvas#chart { width: 100%; max-width: 100%; height: auto; }
+
+footer.app-footer { color: var(--muted); font-size: 12px; padding: 24px; text-align: center; }
+
+.cloud-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.cloud-controls select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; font: inherit; min-width: 220px; }
+.cloud-plans { display: flex; flex-direction: column; gap: 8px; }
+.plan-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.plan-row .plan-name { font-weight: 600; }
+.plan-row .plan-actions { margin-left: auto; display: flex; gap: 6px; }
+.cloud-status { margin-top: 10px; font-size: 12.5px; min-height: 1em; }
+
+.muted { color: var(--muted); }
+.right { text-align: right; }
+.nowrap { white-space: nowrap; }
+.pos { color: var(--accent); }
+.neg { color: var(--danger); }
+
+@media (max-width: 820px) {
+  .grid.cols-3, .grid.cols-4, .summary-cards, .links-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .grid.cols-2, .grid.cols-3, .grid.cols-4, .summary-cards, .links-grid { grid-template-columns: 1fr; }
+}
+
+@media print {
+  .toolbar, .disclaimer button, button, details.panel:not([open]) { display: none !important; }
+  body { background: #fff; }
+  .panel { box-shadow: none; break-inside: avoid; }
+  header.app-header { background: var(--brand-dark) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .summary-cards .v.perm, .summary-cards .v.timing, .tag { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  details.panel[open] > summary::before { content: ""; }
+}
+
+</style>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Dividend &amp; Director's Loan (S455) Planner</h1>
+    <p>
+      Model and compare the tax cost of funding a withdrawal through a director's loan
+      (with S455 and benefit-in-kind exposure) versus declaring dividends — including the
+      higher-rate / additional-rate bands, the personal allowance taper, and the knock-on
+      tax when dividends are taken to fund a tax bill.
+    </p>
+  </header>
+
+  <div class="wrap">
+    <div class="disclaimer">
+      <strong>Planning aid, not tax advice.</strong> Figures are estimates to support a
+      client conversation. All rates are editable in <em>Assumptions</em> and default to the
+      <strong>2026/27</strong> tax year — verify against current HMRC guidance before relying on
+      them. The HMRC official rate of interest is now reviewed quarterly.
+    </div>
+
+    <div class="toolbar">
+      <button class="primary" id="btn-add">+ Add scenario</button>
+      <button id="btn-example">Load worked example (Spanish property)</button>
+      <button id="btn-reset" class="ghost">Reset to defaults</button>
+      <span class="spacer"></span>
+      <button id="btn-print">🖨 Print / Save PDF</button>
+    </div>
+
+    <!-- ASSUMPTIONS ------------------------------------------------------- -->
+    <details class="panel" id="assumptions">
+      <summary>Assumptions &amp; tax rates <span class="sub" id="assumptions-year"></span></summary>
+      <div class="panel-body">
+        <p class="muted" style="margin-top:0">
+          Defaults are for <strong>2026/27</strong>. Edit any figure for a different year or
+          to use the official rate of interest applicable to the period in question.
+        </p>
+        <div class="grid cols-4" id="rates-grid"></div>
+      </div>
+    </details>
+
+    <!-- SCENARIOS --------------------------------------------------------- -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Scenarios</h2>
+        <span class="sub">Build one row per year. Dividends are credited to the loan account (reducing the S455 balance); external repayments are cash from elsewhere (e.g. selling a property).</span>
+      </div>
+      <div class="panel-body" id="scenarios"></div>
+    </div>
+
+    <!-- COMPARISON -------------------------------------------------------- -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Comparison</h2>
+        <span class="sub">Permanent tax cost is money gone for good. S455 is refundable once the loan is cleared — a cash-flow / timing cost.</span>
+      </div>
+      <div class="panel-body">
+        <div class="table-scroll">
+          <table class="data compare-table" id="compare"></table>
+        </div>
+        <div style="margin-top:18px">
+          <canvas id="chart" width="1100" height="340" aria-label="Cost comparison chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- GUIDANCE ---------------------------------------------------------- -->
+    <div class="panel">
+      <div class="panel-head"><h2>HMRC guidance &amp; legislation</h2></div>
+      <div class="panel-body">
+        <div class="links-grid">
+          <div class="link-card">
+            <h3>S455 — loans to participators</h3>
+            <ul>
+              <li><a href="https://www.gov.uk/directors-loans" target="_blank" rel="noopener">GOV.UK — Director's loans (overview)</a></li>
+              <li><a href="https://www.gov.uk/directors-loans/you-owe-your-company-money" target="_blank" rel="noopener">GOV.UK — If you owe your company money (S455 charge)</a></li>
+              <li><a href="https://www.gov.uk/hmrc-internal-manuals/company-taxation-manual/ctm61505" target="_blank" rel="noopener">HMRC Company Taxation Manual — CTM61505 (loans to participators: general)</a></li>
+              <li><a href="https://www.gov.uk/hmrc-internal-manuals/company-taxation-manual/ctm61600" target="_blank" rel="noopener">HMRC CTM61600 — relief for the charge (repayment / s458)</a></li>
+              <li class="leg">Legislation: <a href="https://www.legislation.gov.uk/ukpga/2010/4/section/455" target="_blank" rel="noopener">s455 CTA 2010</a> · <a href="https://www.legislation.gov.uk/ukpga/2010/4/section/458" target="_blank" rel="noopener">s458 CTA 2010 (relief on repayment)</a></li>
+            </ul>
+          </div>
+          <div class="link-card">
+            <h3>Benefit in kind — beneficial (cheap) loans</h3>
+            <ul>
+              <li><a href="https://www.gov.uk/expenses-and-benefits-loans-provided-to-employees" target="_blank" rel="noopener">GOV.UK — Loans provided to employees / directors</a></li>
+              <li><a href="https://www.gov.uk/government/publications/rates-and-allowances-beneficial-loan-arrangements-hmrc-official-rates/beneficial-loan-arrangements-hmrc-official-rates" target="_blank" rel="noopener">GOV.UK — Official rate of interest (current &amp; historic)</a></li>
+              <li><a href="https://www.gov.uk/hmrc-internal-manuals/employment-income-manual/eim26101" target="_blank" rel="noopener">HMRC Employment Income Manual — EIM26101 (beneficial loans)</a></li>
+              <li><a href="https://www.gov.uk/guidance/480-expenses-and-benefits-a-tax-guide" target="_blank" rel="noopener">HMRC 480 expenses &amp; benefits guide (Ch. 17 — loans)</a></li>
+              <li class="leg">Legislation: <a href="https://www.legislation.gov.uk/ukpga/2003/1/section/175" target="_blank" rel="noopener">s175 ITEPA 2003 (taxable cheap loans)</a></li>
+            </ul>
+          </div>
+          <div class="link-card">
+            <h3>Dividends</h3>
+            <ul>
+              <li><a href="https://www.gov.uk/tax-on-dividends" target="_blank" rel="noopener">GOV.UK — Tax on dividends (rates &amp; allowance)</a></li>
+              <li><a href="https://www.gov.uk/hmrc-internal-manuals/savings-and-investment-manual/saim5040" target="_blank" rel="noopener">HMRC SAIM5040 — dividend nil-rate band</a></li>
+              <li class="leg">Legislation: <a href="https://www.legislation.gov.uk/ukpga/2007/3/section/8" target="_blank" rel="noopener">s8 ITA 2007 (dividend rates)</a></li>
+            </ul>
+          </div>
+          <div class="link-card">
+            <h3>Personal allowance &amp; Class 1A NIC</h3>
+            <ul>
+              <li><a href="https://www.gov.uk/income-tax-rates/income-over-100000" target="_blank" rel="noopener">GOV.UK — Personal allowance taper (income over £100k)</a></li>
+              <li><a href="https://www.gov.uk/government/publications/cwg5-class-1a-national-insurance-contributions-on-benefits-in-kind" target="_blank" rel="noopener">GOV.UK — CWG5: Class 1A NIC on benefits in kind</a></li>
+              <li><a href="https://www.gov.uk/expenses-and-benefits-loans-provided-to-employees/whats-exempt" target="_blank" rel="noopener">GOV.UK — £10,000 beneficial loan exemption</a></li>
+              <li class="leg">Legislation: <a href="https://www.legislation.gov.uk/ukpga/2007/3/section/35" target="_blank" rel="noopener">s35 ITA 2007 (personal allowance &amp; taper)</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>How the comparison works</h2></div>
+      <div class="panel-body" style="font-size:13.5px">
+        <ul style="margin-top:0">
+          <li><strong>Permanent cost</strong> = dividend tax + income tax on the loan benefit-in-kind + employer Class 1A NIC. This money never comes back.</li>
+          <li><strong>S455</strong> = 35.75% (2026/27) of the loan still outstanding 9 months and 1 day after the company year end. It is <em>refunded</em> under s458 once the loan is repaid, so it is a cash-flow / timing cost, not a permanent one — shown separately.</li>
+          <li><strong>Benefit in kind</strong> applies whenever the loan exceeds £10,000 at any point in the year. It is taxed on the average balance at the official rate of interest as employment income (so it stacks on salary), and the company pays Class 1A NIC on it.</li>
+          <li><strong>Tax on tax:</strong> if a dividend is declared to fund a tax bill, that dividend is itself taxed — model it by entering the gross dividend needed. For an additional-rate payer there is no rate saving from spreading dividends (all at 39.35%), so declaring dividends purely to clear a refundable S455 charge can be the most expensive route.</li>
+          <li><strong>Bands &amp; allowance:</strong> the model applies the personal allowance taper (£1 lost per £2 over £100k) using adjusted net income, and taxes dividends across the ordinary / upper / additional bands on top of other income.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    Built for client dividend-planning discussions · figures are estimates · verify against HMRC before acting.
+  </footer>
+
+  <script>
+/*
+ * DLA / S455 Dividend Planning — calculation engine
+ * Pure functions, no DOM. Usable in the browser (global functions) and in Node (module.exports).
+ *
+ * All monetary values are in GBP. All rates are decimals (e.g. 0.3935 = 39.35%).
+ *
+ * IMPORTANT: This is a planning aid, not tax advice. The accountant retains
+ * professional responsibility for the figures. Every rate is editable in the UI
+ * because UK tax rates change (the official rate of interest is now reviewed quarterly).
+ */
+
+/* ---------------------------------------------------------------------------
+ * Default assumptions — UK tax year 2026/27.
+ * Verified June 2026. Update via the Assumptions panel when rates change.
+ * ------------------------------------------------------------------------- */
+function defaultRates() {
+  return {
+    taxYearLabel: "2026/27",
+
+    // Income tax — personal allowance and bands
+    personalAllowance: 12570,   // standard PA
+    paTaperThreshold: 100000,   // PA reduced £1 for every £2 of adjusted net income above this
+    basicBandWidth: 37700,      // size of the basic rate band (taxable income above PA)
+    additionalThreshold: 125140, // total income at which the additional rate begins
+
+    // Income tax rates (apply to salary, BIK and other non-dividend income)
+    incomeBasic: 0.20,
+    incomeHigher: 0.40,
+    incomeAdditional: 0.45,
+
+    // Dividend tax
+    dividendAllowance: 500,
+    divOrdinary: 0.1075,   // 2026/27: 8.75% -> 10.75%
+    divUpper: 0.3575,      // 2026/27: 33.75% -> 35.75%
+    divAdditional: 0.3935, // unchanged
+
+    // Loans to participators (s455 CTA 2010)
+    s455Rate: 0.3575,      // loans made on/after 6 April 2026 (was 33.75%)
+
+    // Beneficial loan benefit in kind (s175 ITEPA 2003)
+    officialRate: 0.0375,  // HMRC official rate of interest from 6 April 2025 (reviewed quarterly)
+    bikThreshold: 10000,   // no BIK if loan never exceeds this in the year
+    class1ARate: 0.15,     // employer Class 1A NIC on the cash equivalent (2025/26 onwards)
+
+    // Capital Gains Tax (on a property disposal — e.g. selling the UK home)
+    cgtAnnualExempt: 3000,        // annual exempt amount 2026/27
+    cgtResidentialBasic: 0.18,    // residential gains within the basic rate band
+    cgtResidentialHigher: 0.24,   // residential gains in the higher/additional band
+
+    // Stamp Duty Land Tax (England & NI only — overseas purchases are outside SDLT)
+    sdltBands: [
+      { upper: 125000, rate: 0 },
+      { upper: 250000, rate: 0.02 },
+      { upper: 925000, rate: 0.05 },
+      { upper: 1500000, rate: 0.10 },
+      { upper: Infinity, rate: 0.12 },
+    ],
+    sdltSurcharge: 0.05,      // higher rates for additional dwellings (on the whole price, from £40k)
+    sdltSurchargeFloor: 40000, // surcharge only applies if price is at least this
+    sdltNonResident: 0.02,    // non-UK-resident surcharge on English/NI residential property
+  };
+}
+
+/* Progressive band tax for a single amount (used for SDLT). */
+function progressiveTax(amount, bands) {
+  let tax = 0, prev = 0;
+  for (const b of bands) {
+    if (amount <= prev) break;
+    const slice = Math.min(amount, b.upper) - prev;
+    tax += slice * b.rate;
+    prev = b.upper;
+  }
+  return tax;
+}
+
+/* ---------------------------------------------------------------------------
+ * Stamp Duty Land Tax on a purchase.
+ *   purchase = { price, applies, additionalProperty, nonResident }
+ * `applies` is false for property outside England/NI (e.g. Spain) — SDLT then £0.
+ * Returns { sdlt, standard, surcharge, nonResidentSurcharge, applies }.
+ * ------------------------------------------------------------------------- */
+function computeSDLT(purchase, r) {
+  const price = (purchase && purchase.price) || 0;
+  if (!purchase || !purchase.applies || price <= 0) {
+    return { sdlt: 0, standard: 0, surcharge: 0, nonResidentSurcharge: 0, applies: false, price };
+  }
+  const standard = progressiveTax(price, r.sdltBands);
+  const surcharge = purchase.additionalProperty && price >= r.sdltSurchargeFloor
+    ? price * r.sdltSurcharge : 0;
+  const nonResidentSurcharge = purchase.nonResident ? price * r.sdltNonResident : 0;
+  return {
+    sdlt: standard + surcharge + nonResidentSurcharge,
+    standard, surcharge, nonResidentSurcharge, applies: true, price,
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * Capital Gains Tax on a residential property disposal.
+ *   disposal = { proceeds, cost, expenses, mainResidence, taxableFraction }
+ * If `mainResidence` is true the gain is multiplied by `taxableFraction`
+ * (0 = fully covered by Private Residence Relief, the usual position for a
+ * home lived in throughout). `incomeUsingBand` is the person's taxable income
+ * (after personal allowance) used to work out how much basic-rate band is left.
+ * Returns { gain, taxableGain, cgt, basicPart, higherPart }.
+ * ------------------------------------------------------------------------- */
+function computeCGT(disposal, incomeUsingBand, r) {
+  if (!disposal || !disposal.proceeds) {
+    return { gain: 0, taxableGain: 0, cgt: 0, basicPart: 0, higherPart: 0 };
+  }
+  let gain = Math.max(0, (disposal.proceeds || 0) - (disposal.cost || 0) - (disposal.expenses || 0));
+  if (disposal.mainResidence) {
+    const frac = disposal.taxableFraction != null ? disposal.taxableFraction : 0;
+    gain = gain * frac;
+  }
+  const taxableGain = Math.max(0, gain - r.cgtAnnualExempt);
+
+  // The gain stacks on income; the part within the remaining basic-rate band is
+  // taxed at the lower residential rate, the rest at the higher rate.
+  const remainingBasic = Math.max(0, r.basicBandWidth - Math.max(0, incomeUsingBand));
+  const basicPart = Math.min(taxableGain, remainingBasic);
+  const higherPart = taxableGain - basicPart;
+  const cgt = basicPart * r.cgtResidentialBasic + higherPart * r.cgtResidentialHigher;
+
+  return { gain, taxableGain, cgt, basicPart, higherPart };
+}
+
+/* ---------------------------------------------------------------------------
+ * Band slicing helper.
+ * Taxes `amount` of income that sits on top of `base` (both expressed as
+ * taxable income, i.e. after personal allowance), across the supplied bands.
+ * The first `allowance` of `amount` is taxed at 0% but still consumes band space
+ * (this is how the dividend allowance / nil-rate band works).
+ *   bands: [{ upper, rate }, ...] where `upper` is a cumulative taxable-income limit.
+ * ------------------------------------------------------------------------- */
+function sliceTax(base, amount, allowance, bands) {
+  let tax = 0;
+  let pos = base;
+  let remaining = amount;
+  let allowLeft = allowance;
+
+  for (const b of bands) {
+    if (remaining <= 0) break;
+    const room = b.upper - pos;
+    if (room <= 0) continue;
+    const inBand = Math.min(remaining, room);
+    const allowanceUsed = Math.min(allowLeft, inBand);
+    tax += (inBand - allowanceUsed) * b.rate;
+    allowLeft -= allowanceUsed;
+    remaining -= inBand;
+    pos += inBand;
+  }
+  return tax;
+}
+
+/* ---------------------------------------------------------------------------
+ * Compute total income tax for a person with:
+ *   nonDivIncome — salary, BIK and other non-savings/non-dividend income
+ *   dividends    — dividend income (stacks on top of nonDivIncome)
+ *
+ * Handles the personal allowance taper (using adjusted net income), allocates
+ * the PA to non-dividend income first, applies the dividend allowance, and taxes
+ * each slice at the correct band rate.
+ *
+ * Returns { pa, incomeTax, dividendTax, total }.
+ * ------------------------------------------------------------------------- */
+function computeTax(nonDivIncome, dividends, r) {
+  nonDivIncome = Math.max(0, nonDivIncome || 0);
+  dividends = Math.max(0, dividends || 0);
+
+  const ani = nonDivIncome + dividends; // simplified adjusted net income
+  const paReduction = ani > r.paTaperThreshold
+    ? Math.floor((ani - r.paTaperThreshold) / 2)
+    : 0;
+  const pa = Math.max(0, r.personalAllowance - paReduction);
+
+  // Personal allowance to non-dividend income first, remainder to dividends
+  const paToNonDiv = Math.min(pa, nonDivIncome);
+  const paLeft = pa - paToNonDiv;
+  const nonDivTaxable = nonDivIncome - paToNonDiv;
+  const divTaxable = Math.max(0, dividends - paLeft);
+
+  // Band boundaries (in taxable-income terms)
+  const basicLimit = r.basicBandWidth;
+  const additionalLimit = Math.max(basicLimit, r.additionalThreshold - pa);
+
+  const incomeBands = [
+    { upper: basicLimit, rate: r.incomeBasic },
+    { upper: additionalLimit, rate: r.incomeHigher },
+    { upper: Infinity, rate: r.incomeAdditional },
+  ];
+  const dividendBands = [
+    { upper: basicLimit, rate: r.divOrdinary },
+    { upper: additionalLimit, rate: r.divUpper },
+    { upper: Infinity, rate: r.divAdditional },
+  ];
+
+  const incomeTax = sliceTax(0, nonDivTaxable, 0, incomeBands);
+  // Dividends sit on top of the non-dividend taxable income.
+  const dividendTax = sliceTax(nonDivTaxable, divTaxable, r.dividendAllowance, dividendBands);
+
+  return { pa, incomeTax, dividendTax, total: incomeTax + dividendTax };
+}
+
+/* ---------------------------------------------------------------------------
+ * Run a multi-year scenario.
+ *
+ * scenario = {
+ *   name, note,
+ *   otherIncome,   // annual non-dividend income (e.g. salary), assumed constant
+ *   openingLoan,   // director's loan balance brought forward (positive = director owes company)
+ *   years: [ { drawdown, dividends, externalRepayment }, ... ]
+ * }
+ *
+ * Convention:
+ *   - `dividends` declared in a year are credited against the loan (they reduce the
+ *     director's loan account, which is the usual way to "bring down the s455").
+ *   - `externalRepayment` is cash repaid from another source (e.g. selling the UK home).
+ *   - `drawdown` increases the loan.
+ *
+ * For each year we compute:
+ *   - loan opening/closing balance
+ *   - benefit in kind (average-balance method at the official rate) + its income tax + Class 1A
+ *   - dividend tax (marginal, on top of salary + BIK)
+ *   - s455 liability on the closing balance, and the cash movement vs the prior year
+ *     (positive = pay HMRC, negative = s458 refund as the loan is reduced)
+ *
+ * We distinguish PERMANENT tax cost (dividend tax + BIK income tax + Class 1A — never
+ * comes back) from the S455 TIMING cost (refundable once the loan is cleared).
+ * ------------------------------------------------------------------------- */
+function runScenario(scenario, r) {
+  const otherIncome = scenario.otherIncome || 0;
+  const baseline = computeTax(otherIncome, 0, r); // "do nothing" — salary only
+
+  let opening = scenario.openingLoan || 0;
+  let prevS455 = r.s455Rate * Math.max(0, opening);
+  // Note: we treat the brought-forward balance as already having borne its s455,
+  // so the opening liability is the baseline against which movements are measured.
+
+  // One-off property transaction taxes (optional)
+  const purchase = scenario.purchase || null;   // { year, price, applies, additionalProperty, nonResident }
+  const disposal = scenario.disposal || null;    // { year, proceeds, cost, expenses, mainResidence, taxableFraction }
+  const sdltResult = computeSDLT(purchase, r);
+  const sdltYear = purchase && purchase.year ? purchase.year : 1;
+  const disposalYear = disposal && disposal.year ? disposal.year : (scenario.years || []).length;
+
+  const years = [];
+  const totals = {
+    dividends: 0,
+    dividendTax: 0,
+    bik: 0,
+    bikIncomeTax: 0,
+    class1A: 0,
+    permanentCost: 0,
+    s455Paid: 0,
+    s455Refunded: 0,
+    sdlt: 0,
+    cgt: 0,
+  };
+  let peakS455 = prevS455;
+
+  (scenario.years || []).forEach((y, i) => {
+    const drawdown = y.drawdown || 0;
+    const dividends = y.dividends || 0;
+    const externalRepayment = y.externalRepayment || 0;
+
+    const closing = opening + drawdown - dividends - externalRepayment;
+
+    // Benefit in kind — average balance method, only if loan exceeds the threshold
+    const maxBalance = Math.max(Math.max(0, opening), Math.max(0, closing));
+    const avgBalance = (Math.max(0, opening) + Math.max(0, closing)) / 2;
+    const bikApplies = maxBalance > r.bikThreshold;
+    const bik = bikApplies ? avgBalance * r.officialRate : 0;
+
+    // Split the marginal tax between BIK (income tax) and dividends
+    const taxBaseline = baseline.total;
+    const taxWithBik = computeTax(otherIncome + bik, 0, r).total;
+    const taxWithBikAndDiv = computeTax(otherIncome + bik, dividends, r).total;
+
+    const bikIncomeTax = taxWithBik - taxBaseline;
+    const dividendTax = taxWithBikAndDiv - taxWithBik;
+    const class1A = bik * r.class1ARate;
+
+    // s455 on the closing balance, and the cash movement this year
+    const s455Liab = r.s455Rate * Math.max(0, closing);
+    const s455Movement = s455Liab - prevS455; // + = pay, - = refund
+    peakS455 = Math.max(peakS455, s455Liab);
+
+    const permanentCost = dividendTax + bikIncomeTax + class1A;
+
+    // Attach any one-off property taxes that fall in this year
+    const yearNum = i + 1;
+    const sdlt = purchase && purchase.applies && yearNum === sdltYear ? sdltResult.sdlt : 0;
+    let cgt = 0, cgtDetail = null;
+    if (disposal && disposal.proceeds && yearNum === disposalYear) {
+      // Income occupying the basic-rate band this year (salary + BIK + dividends, after PA)
+      const incomeAfterPA = Math.max(0, (otherIncome + bik + dividends) - computeTax(otherIncome + bik, dividends, r).pa);
+      cgtDetail = computeCGT(disposal, incomeAfterPA, r);
+      cgt = cgtDetail.cgt;
+    }
+
+    years.push({
+      year: yearNum,
+      opening,
+      drawdown,
+      dividends,
+      externalRepayment,
+      closing,
+      avgBalance,
+      bik,
+      bikIncomeTax,
+      dividendTax,
+      class1A,
+      s455Liab,
+      s455Movement,
+      permanentCost,
+      sdlt,
+      cgt,
+      cgtDetail,
+      effectiveDivRate: dividends > 0 ? dividendTax / dividends : 0,
+    });
+
+    totals.sdlt += sdlt;
+    totals.cgt += cgt;
+
+    totals.dividends += dividends;
+    totals.dividendTax += dividendTax;
+    totals.bik += bik;
+    totals.bikIncomeTax += bikIncomeTax;
+    totals.class1A += class1A;
+    totals.permanentCost += permanentCost;
+    if (s455Movement > 0) totals.s455Paid += s455Movement;
+    else totals.s455Refunded += -s455Movement;
+
+    opening = closing;
+    prevS455 = s455Liab;
+  });
+
+  const closingLoan = opening;
+  const s455Outstanding = r.s455Rate * Math.max(0, closingLoan); // still locked up with HMRC at the end
+  const transactionTaxes = totals.sdlt + totals.cgt;
+
+  return {
+    name: scenario.name,
+    note: scenario.note || "",
+    baselineTax: baseline.total,
+    years,
+    totals,
+    peakS455,
+    closingLoan,
+    s455Outstanding,
+    sdltResult,
+    transactionTaxes,
+    // Headline: what it really costs once the dust settles and the loan is cleared.
+    // Permanent cost is money gone for good; s455 still outstanding is cash locked up.
+    netPermanentCost: totals.permanentCost,
+    // Permanent income-tax cost + one-off transaction taxes (SDLT/CGT) — all non-refundable.
+    totalNonRefundable: totals.permanentCost + transactionTaxes,
+    cashLockedUp: s455Outstanding,
+  };
+}
+
+/* Convenience: run several scenarios with shared assumptions. */
+function runAll(scenarios, r) {
+  return scenarios.map((s) => runScenario(s, r));
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    defaultRates, sliceTax, computeTax, runScenario, runAll,
+    progressiveTax, computeSDLT, computeCGT,
+  };
+}
+
+</script>
+  <script>
+/* global defaultRates, runScenario */
+/*
+ * UI layer for the Dividend / S455 planner.
+ * State is kept in a single `state` object, persisted to localStorage, and the
+ * whole view re-renders on change. No frameworks — just the DOM.
+ */
+
+const STORAGE_KEY = "dla-s455-planner-v1";
+
+/* ---- Rate metadata: drives the editable Assumptions panel ---------------- */
+const RATE_FIELDS = [
+  { key: "taxYearLabel", label: "Tax year", type: "text", group: "General" },
+  { key: "personalAllowance", label: "Personal allowance", type: "money", group: "Income tax" },
+  { key: "paTaperThreshold", label: "PA taper threshold", type: "money", group: "Income tax", hint: "lose £1 per £2 above" },
+  { key: "basicBandWidth", label: "Basic rate band width", type: "money", group: "Income tax" },
+  { key: "additionalThreshold", label: "Additional rate threshold", type: "money", group: "Income tax" },
+  { key: "incomeBasic", label: "Income tax — basic", type: "pct", group: "Income tax" },
+  { key: "incomeHigher", label: "Income tax — higher", type: "pct", group: "Income tax" },
+  { key: "incomeAdditional", label: "Income tax — additional", type: "pct", group: "Income tax" },
+  { key: "dividendAllowance", label: "Dividend allowance", type: "money", group: "Dividends" },
+  { key: "divOrdinary", label: "Dividend — ordinary", type: "pct", group: "Dividends" },
+  { key: "divUpper", label: "Dividend — upper", type: "pct", group: "Dividends" },
+  { key: "divAdditional", label: "Dividend — additional", type: "pct", group: "Dividends" },
+  { key: "s455Rate", label: "S455 rate", type: "pct", group: "Loan / S455 / BIK" },
+  { key: "officialRate", label: "Official rate of interest", type: "pct", group: "Loan / S455 / BIK", hint: "BIK — reviewed quarterly" },
+  { key: "bikThreshold", label: "BIK exemption threshold", type: "money", group: "Loan / S455 / BIK" },
+  { key: "class1ARate", label: "Class 1A NIC rate", type: "pct", group: "Loan / S455 / BIK" },
+  { key: "cgtAnnualExempt", label: "CGT annual exempt amount", type: "money", group: "CGT / SDLT" },
+  { key: "cgtResidentialBasic", label: "CGT residential — basic", type: "pct", group: "CGT / SDLT" },
+  { key: "cgtResidentialHigher", label: "CGT residential — higher", type: "pct", group: "CGT / SDLT" },
+  { key: "sdltSurcharge", label: "SDLT additional-dwelling surcharge", type: "pct", group: "CGT / SDLT" },
+  { key: "sdltNonResident", label: "SDLT non-resident surcharge", type: "pct", group: "CGT / SDLT" },
+];
+
+/* ---- Worked example: the Spanish-property client ------------------------- */
+function exampleScenarios() {
+  const blankYear = () => ({ drawdown: 0, dividends: 0, externalRepayment: 0 });
+  // Spanish property purchase: outside SDLT (not England/NI). UK home sale: main
+  // residence, so fully covered by Private Residence Relief (taxable fraction 0).
+  const spanishPurchase = () => ({ year: 1, price: 1000000, applies: false, additionalProperty: true, nonResident: false });
+  const homeDisposal = () => ({ year: 4, proceeds: 1000000, cost: 1000000, expenses: 0, mainResidence: true, taxableFraction: 0 });
+  return [
+    {
+      name: "A · Loan, repay from UK home sale (no extra dividends)",
+      note: "Borrow £1m, pay S455 + BIK, repay in full from the house sale in year 4. S455 is refunded.",
+      otherIncome: 150000,
+      openingLoan: 0,
+      purchase: spanishPurchase(),
+      disposal: homeDisposal(),
+      years: [
+        { drawdown: 1000000, dividends: 0, externalRepayment: 0 },
+        blankYear(),
+        blankYear(),
+        { drawdown: 0, dividends: 0, externalRepayment: 1000000 },
+      ],
+    },
+    {
+      name: "B · Loan, clear with £250k dividends/yr",
+      note: "Borrow £1m, declare £250k dividends each year to bring down the S455 balance.",
+      otherIncome: 150000,
+      openingLoan: 0,
+      purchase: spanishPurchase(),
+      disposal: homeDisposal(),
+      years: [
+        { drawdown: 1000000, dividends: 250000, externalRepayment: 0 },
+        { drawdown: 0, dividends: 250000, externalRepayment: 0 },
+        { drawdown: 0, dividends: 250000, externalRepayment: 0 },
+        { drawdown: 0, dividends: 250000, externalRepayment: 0 },
+      ],
+    },
+    {
+      name: "C · Take £1m as dividends up front",
+      note: "No loan. Declare the full £1m as a dividend in year 1 and fund the purchase directly.",
+      otherIncome: 150000,
+      openingLoan: 0,
+      purchase: spanishPurchase(),
+      disposal: homeDisposal(),
+      years: [
+        { drawdown: 0, dividends: 1000000, externalRepayment: 0 },
+        blankYear(),
+        blankYear(),
+        blankYear(),
+      ],
+    },
+  ];
+}
+
+function blankScenario() {
+  return {
+    name: "New scenario",
+    note: "",
+    otherIncome: 150000,
+    openingLoan: 0,
+    purchase: { year: 1, price: 0, applies: false, additionalProperty: true, nonResident: false },
+    disposal: { year: 4, proceeds: 0, cost: 0, expenses: 0, mainResidence: true, taxableFraction: 0 },
+    years: [
+      { drawdown: 0, dividends: 0, externalRepayment: 0 },
+      { drawdown: 0, dividends: 0, externalRepayment: 0 },
+      { drawdown: 0, dividends: 0, externalRepayment: 0 },
+      { drawdown: 0, dividends: 0, externalRepayment: 0 },
+    ],
+  };
+}
+
+/* ---- State --------------------------------------------------------------- */
+let state = loadState();
+
+function normaliseScenario(scn) {
+  if (!scn.purchase) scn.purchase = { year: 1, price: 0, applies: false, additionalProperty: true, nonResident: false };
+  if (!scn.disposal) scn.disposal = { year: scn.years ? scn.years.length : 4, proceeds: 0, cost: 0, expenses: 0, mainResidence: true, taxableFraction: 0 };
+  return scn;
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.rates && parsed.scenarios) {
+        // Merge any new default rate keys (e.g. CGT/SDLT added in a later version)
+        parsed.rates = Object.assign(defaultRates(), parsed.rates);
+        parsed.scenarios.forEach(normaliseScenario);
+        return parsed;
+      }
+    }
+  } catch (e) { /* ignore */ }
+  return { rates: defaultRates(), scenarios: exampleScenarios() };
+}
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+}
+
+/* ---- Formatting ---------------------------------------------------------- */
+const gbp = (n) => "£" + Math.round(n || 0).toLocaleString("en-GB");
+const gbp0 = (n) => (n === 0 ? "—" : gbp(n));
+const pct = (n) => (n * 100).toFixed(2).replace(/\.?0+$/, "") + "%";
+const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + gbp(Math.abs(n));
+
+/* ---- Render: assumptions ------------------------------------------------- */
+function renderRates() {
+  document.getElementById("assumptions-year").textContent =
+    "· defaults for " + state.rates.taxYearLabel;
+  const grid = document.getElementById("rates-grid");
+  grid.innerHTML = "";
+  RATE_FIELDS.forEach((f) => {
+    const wrap = document.createElement("label");
+    wrap.className = "field";
+    const val = state.rates[f.key];
+    const display = f.type === "pct" ? (val * 100) : val;
+    const hint = f.hint ? ` <span class="hint">(${f.hint})</span>` : "";
+    const suffix = f.type === "pct" ? "%" : f.type === "money" ? "£" : "";
+    wrap.innerHTML = `
+      <span class="lbl">${f.label}${hint}</span>
+      <input type="${f.type === "text" ? "text" : "number"}"
+             step="${f.type === "pct" ? "0.01" : "any"}"
+             data-rate="${f.key}" data-rtype="${f.type}"
+             value="${f.type === "text" ? val : display}" />`;
+    grid.appendChild(wrap);
+  });
+  grid.querySelectorAll("input").forEach((inp) => {
+    inp.addEventListener("input", (e) => {
+      const key = e.target.dataset.rate;
+      const rtype = e.target.dataset.rtype;
+      if (rtype === "text") state.rates[key] = e.target.value;
+      else if (rtype === "pct") state.rates[key] = (parseFloat(e.target.value) || 0) / 100;
+      else state.rates[key] = parseFloat(e.target.value) || 0;
+      saveState();
+      renderScenarios();
+      renderComparison();
+      document.getElementById("assumptions-year").textContent =
+        "· defaults for " + state.rates.taxYearLabel;
+    });
+  });
+}
+
+/* ---- Render: scenarios --------------------------------------------------- */
+function renderScenarios() {
+  const host = document.getElementById("scenarios");
+  host.innerHTML = "";
+  state.scenarios.forEach((scn, idx) => {
+    host.appendChild(renderScenario(scn, idx));
+  });
+}
+
+function renderScenario(scn, idx) {
+  const r = state.rates;
+  const result = runScenario(scn, r);
+  const root = document.createElement("div");
+  root.className = "scenario";
+
+  /* header */
+  const head = document.createElement("div");
+  head.className = "sc-head";
+  head.innerHTML = `
+    <input class="sc-name" value="${escapeAttr(scn.name)}" data-bind="name" />
+    <button class="small ghost" data-act="dup">Duplicate</button>
+    <button class="small danger" data-act="del">Delete</button>`;
+  root.appendChild(head);
+
+  /* body */
+  const body = document.createElement("div");
+  body.className = "sc-body";
+
+  body.innerHTML = `
+    <div class="grid cols-3" style="margin-bottom:14px">
+      <label class="field"><span class="lbl">Other annual income <span class="hint">(salary etc., before dividends)</span></span>
+        <input type="number" data-bind="otherIncome" value="${scn.otherIncome}" /></label>
+      <label class="field"><span class="lbl">Opening loan balance <span class="hint">(director owes company)</span></span>
+        <input type="number" data-bind="openingLoan" value="${scn.openingLoan}" /></label>
+      <label class="field"><span class="lbl">Note</span>
+        <input type="text" data-bind="note" value="${escapeAttr(scn.note || "")}" /></label>
+    </div>`;
+
+  /* year input table */
+  const yearTbl = document.createElement("div");
+  yearTbl.className = "table-scroll";
+  let yrows = scn.years.map((y, yi) => `
+    <tr data-yi="${yi}">
+      <td>Year ${yi + 1}</td>
+      <td><input type="number" data-yfield="drawdown" value="${y.drawdown}" /></td>
+      <td><input type="number" data-yfield="dividends" value="${y.dividends}" /></td>
+      <td><input type="number" data-yfield="externalRepayment" value="${y.externalRepayment}" /></td>
+      <td class="nowrap muted">${gbp(result.years[yi].closing)}</td>
+      <td><button class="small ghost" data-act="delyear" data-yi="${yi}">✕</button></td>
+    </tr>`).join("");
+  yearTbl.innerHTML = `
+    <table class="data">
+      <thead><tr>
+        <th>Period</th><th>Loan drawdown</th><th>Dividends (credited to loan)</th>
+        <th>External repayment</th><th>Closing loan</th><th></th>
+      </tr></thead>
+      <tbody>${yrows}</tbody>
+    </table>`;
+  body.appendChild(yearTbl);
+
+  const addYearBtn = document.createElement("button");
+  addYearBtn.className = "small";
+  addYearBtn.textContent = "+ Add year";
+  addYearBtn.style.marginTop = "8px";
+  addYearBtn.addEventListener("click", () => {
+    scn.years.push({ drawdown: 0, dividends: 0, externalRepayment: 0 });
+    commit();
+  });
+  body.appendChild(addYearBtn);
+
+  /* property transaction taxes (SDLT on a purchase, CGT on a disposal) */
+  const p = scn.purchase, d = scn.disposal;
+  const prop = document.createElement("details");
+  prop.style.marginTop = "14px";
+  prop.innerHTML = `
+    <summary style="cursor:pointer;font-weight:600;font-size:13.5px">Property transaction taxes — SDLT &amp; CGT (one-off)</summary>
+    <div style="border:1px solid var(--line);border-radius:8px;padding:14px;margin-top:8px">
+      <div style="font-weight:600;margin-bottom:8px">Purchase (SDLT)</div>
+      <p class="muted" style="margin:0 0 10px;font-size:12px">SDLT applies to property in England &amp; Northern Ireland only. A property in Spain is outside SDLT — leave "Located in England/NI" unticked (Spain levies its own transfer tax / VAT, modelled separately).</p>
+      <div class="grid cols-4">
+        <label class="field"><span class="lbl">Purchase price</span><input type="number" data-pbind="price" value="${p.price}" /></label>
+        <label class="field"><span class="lbl">In which year</span><input type="number" data-pbind="year" value="${p.year}" /></label>
+        <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pbind="applies" ${p.applies ? "checked" : ""}/> Located in England/NI</label></label>
+        <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pbind="additionalProperty" ${p.additionalProperty ? "checked" : ""}/> Additional dwelling (+surcharge)</label></label>
+        <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pbind="nonResident" ${p.nonResident ? "checked" : ""}/> Non-UK-resident (+2%)</label></label>
+      </div>
+      <div style="font-weight:600;margin:16px 0 8px">Disposal (CGT)</div>
+      <p class="muted" style="margin:0 0 10px;font-size:12px">Selling the UK home: if it has been the main residence throughout, Private Residence Relief usually means no CGT — keep "Main residence" ticked with taxable fraction 0. For a rental or second home, untick it (or set the taxable fraction).</p>
+      <div class="grid cols-4">
+        <label class="field"><span class="lbl">Sale proceeds</span><input type="number" data-dbind="proceeds" value="${d.proceeds}" /></label>
+        <label class="field"><span class="lbl">Base cost</span><input type="number" data-dbind="cost" value="${d.cost}" /></label>
+        <label class="field"><span class="lbl">Costs of sale</span><input type="number" data-dbind="expenses" value="${d.expenses}" /></label>
+        <label class="field"><span class="lbl">In which year</span><input type="number" data-dbind="year" value="${d.year}" /></label>
+        <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-dbind="mainResidence" ${d.mainResidence ? "checked" : ""}/> Main residence (PRR)</label></label>
+        <label class="field"><span class="lbl">Taxable fraction <span class="hint">(0–1, if not fully PRR)</span></span><input type="number" step="0.01" data-dbind="taxableFraction" value="${d.taxableFraction}" /></label>
+      </div>
+    </div>`;
+  body.appendChild(prop);
+
+  /* summary cards */
+  const cards = document.createElement("div");
+  cards.className = "summary-cards";
+  cards.style.marginTop = "16px";
+  cards.innerHTML = `
+    <div class="card"><div class="k">Permanent tax cost</div>
+      <div class="v perm">${gbp(result.netPermanentCost)}</div>
+      <div class="note">dividend tax + BIK income tax + Class 1A</div></div>
+    <div class="card"><div class="k">Transaction taxes</div>
+      <div class="v perm">${gbp(result.transactionTaxes)}</div>
+      <div class="note">SDLT ${gbp(result.totals.sdlt)} · CGT ${gbp(result.totals.cgt)}</div></div>
+    <div class="card"><div class="k">Peak S455 (refundable)</div>
+      <div class="v timing">${gbp(result.peakS455)}</div>
+      <div class="note">cash locked up with HMRC at peak</div></div>
+    <div class="card"><div class="k">Total non-refundable cost</div>
+      <div class="v perm">${gbp(result.totalNonRefundable)}</div>
+      <div class="note">permanent + SDLT + CGT</div></div>`;
+  body.appendChild(cards);
+
+  /* detailed per-year results */
+  const detail = document.createElement("details");
+  detail.className = "breakdown";
+  detail.style.marginTop = "8px";
+  detail.innerHTML = `<summary class="muted" style="cursor:pointer;font-size:13px">Year-by-year breakdown</summary>`;
+  const detTbl = document.createElement("div");
+  detTbl.className = "table-scroll";
+  detTbl.style.marginTop = "8px";
+  let drows = result.years.map((y) => `
+    <tr>
+      <td>Year ${y.year}</td>
+      <td>${gbp(y.closing)}</td>
+      <td>${gbp0(y.bik)}</td>
+      <td>${gbp0(y.bikIncomeTax)}</td>
+      <td>${gbp0(y.class1A)}</td>
+      <td>${gbp0(y.dividendTax)}${y.dividends > 0 ? ` <span class="muted">(${pct(y.effectiveDivRate)})</span>` : ""}</td>
+      <td>${gbp0(y.s455Liab)}</td>
+      <td class="${y.s455Movement > 0 ? "neg" : y.s455Movement < 0 ? "pos" : "muted"}">${y.s455Movement === 0 ? "—" : signed(y.s455Movement)}</td>
+      <td>${gbp0(y.sdlt)}</td>
+      <td>${gbp0(y.cgt)}</td>
+      <td><strong>${gbp(y.permanentCost + y.sdlt + y.cgt)}</strong></td>
+    </tr>`).join("");
+  detTbl.innerHTML = `
+    <table class="data">
+      <thead><tr>
+        <th>Period</th><th>Closing loan</th><th>BIK value</th><th>BIK income tax</th>
+        <th>Class 1A</th><th>Dividend tax</th><th>S455 liability</th>
+        <th>S455 cash (+pay/−refund)</th><th>SDLT</th><th>CGT</th><th>Non-refundable cost</th>
+      </tr></thead>
+      <tbody>${drows}</tbody>
+      <tfoot><tr>
+        <td>Total</td><td></td><td>${gbp(result.totals.bik)}</td>
+        <td>${gbp(result.totals.bikIncomeTax)}</td><td>${gbp(result.totals.class1A)}</td>
+        <td>${gbp(result.totals.dividendTax)}</td><td></td>
+        <td class="muted">paid ${gbp(result.totals.s455Paid)} / ref ${gbp(result.totals.s455Refunded)}</td>
+        <td>${gbp(result.totals.sdlt)}</td><td>${gbp(result.totals.cgt)}</td>
+        <td>${gbp(result.totalNonRefundable)}</td>
+      </tr></tfoot>
+    </table>`;
+  detail.appendChild(detTbl);
+  body.appendChild(detail);
+
+  root.appendChild(body);
+
+  /* ---- wiring ---- */
+  head.querySelector('[data-act="dup"]').addEventListener("click", () => {
+    state.scenarios.splice(idx + 1, 0, JSON.parse(JSON.stringify(scn)));
+    state.scenarios[idx + 1].name = scn.name + " (copy)";
+    commit();
+  });
+  head.querySelector('[data-act="del"]').addEventListener("click", () => {
+    if (state.scenarios.length <= 1) { alert("Keep at least one scenario."); return; }
+    state.scenarios.splice(idx, 1);
+    commit();
+  });
+
+  root.querySelectorAll("[data-bind]").forEach((inp) => {
+    inp.addEventListener("input", (e) => {
+      const field = e.target.dataset.bind;
+      if (field === "name" || field === "note") scn[field] = e.target.value;
+      else scn[field] = parseFloat(e.target.value) || 0;
+      saveState();
+      // Light re-render: name/note don't need a full recompute, numbers do.
+      if (field !== "name" && field !== "note") refreshScenarioInPlace(root, scn);
+      renderComparison();
+    });
+  });
+
+  root.querySelectorAll("[data-yfield]").forEach((inp) => {
+    inp.addEventListener("input", (e) => {
+      const tr = e.target.closest("tr");
+      const yi = parseInt(tr.dataset.yi, 10);
+      scn.years[yi][e.target.dataset.yfield] = parseFloat(e.target.value) || 0;
+      saveState();
+      refreshScenarioInPlace(root, scn);
+      renderComparison();
+    });
+  });
+
+  root.querySelectorAll('[data-act="delyear"]').forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const yi = parseInt(e.target.dataset.yi, 10);
+      if (scn.years.length <= 1) { alert("Keep at least one year."); return; }
+      scn.years.splice(yi, 1);
+      commit();
+    });
+  });
+
+  // Property transaction tax inputs (purchase = pbind, disposal = dbind)
+  const bindProp = (selector, target) => {
+    root.querySelectorAll(selector).forEach((inp) => {
+      inp.addEventListener("input", (e) => {
+        const field = e.target.dataset.pbind || e.target.dataset.dbind;
+        if (e.target.type === "checkbox") target[field] = e.target.checked;
+        else target[field] = parseFloat(e.target.value) || 0;
+        saveState();
+        refreshScenarioInPlace(root, scn);
+        renderComparison();
+      });
+    });
+  };
+  bindProp("[data-pbind]", scn.purchase);
+  bindProp("[data-dbind]", scn.disposal);
+
+  return root;
+}
+
+/* Re-run + repaint a scenario's computed cells without rebuilding inputs
+ * (so the user's cursor/focus is preserved while typing). */
+function refreshScenarioInPlace(root, scn) {
+  const fresh = renderScenario(scn, state.scenarios.indexOf(scn));
+  root.querySelector(".summary-cards").replaceWith(fresh.querySelector(".summary-cards"));
+  root.querySelector("details.breakdown").replaceWith(fresh.querySelector("details.breakdown"));
+  // update closing-loan column
+  const result = runScenario(scn, state.rates);
+  root.querySelectorAll("tbody tr[data-yi]").forEach((tr) => {
+    const yi = parseInt(tr.dataset.yi, 10);
+    const cell = tr.children[4];
+    if (cell && result.years[yi]) cell.textContent = gbp(result.years[yi].closing);
+  });
+}
+
+/* ---- Render: comparison table + chart ------------------------------------ */
+function renderComparison() {
+  const r = state.rates;
+  const results = state.scenarios.map((s) => runScenario(s, r));
+  const tbl = document.getElementById("compare");
+
+  const minPerm = Math.min(...results.map((x) => x.netPermanentCost));
+  const minNonRef = Math.min(...results.map((x) => x.totalNonRefundable));
+  const minTotal = Math.min(...results.map((x) => x.totalNonRefundable + x.s455Outstanding));
+
+  let header = "<thead><tr><th>Scenario</th>";
+  results.forEach((x) => { header += `<th>${escapeHtml(x.name)}</th>`; });
+  header += "</tr></thead>";
+
+  const rows = [
+    ["Total dividends declared", (x) => gbp(x.totals.dividends)],
+    ["Dividend tax", (x) => gbp(x.totals.dividendTax)],
+    ["BIK income tax", (x) => gbp(x.totals.bikIncomeTax)],
+    ["Employer Class 1A NIC", (x) => gbp(x.totals.class1A)],
+    ["Permanent tax cost", (x) => gbp(x.netPermanentCost), (x) => x.netPermanentCost === minPerm],
+    ["SDLT (purchase)", (x) => gbp(x.totals.sdlt)],
+    ["CGT (disposal)", (x) => gbp(x.totals.cgt)],
+    ["Total non-refundable cost", (x) => gbp(x.totalNonRefundable), (x) => x.totalNonRefundable === minNonRef],
+    ["Peak S455 (cash locked up)", (x) => gbp(x.peakS455)],
+    ["S455 outstanding at end", (x) => gbp(x.s455Outstanding)],
+    ["Non-refundable + S455 still locked", (x) => gbp(x.totalNonRefundable + x.s455Outstanding), (x) => (x.totalNonRefundable + x.s455Outstanding) === minTotal],
+  ];
+
+  let bodyHtml = "<tbody>";
+  rows.forEach(([label, fn, best]) => {
+    bodyHtml += `<tr><td>${label}</td>`;
+    results.forEach((x) => {
+      const isBest = best && best(x);
+      bodyHtml += `<td class="${isBest ? "best" : ""}">${fn(x)}</td>`;
+    });
+    bodyHtml += "</tr>";
+  });
+  bodyHtml += "</tbody>";
+
+  tbl.innerHTML = header + bodyHtml;
+  drawChart(results);
+}
+
+/* ---- Canvas chart: grouped bars (permanent cost vs S455 locked up) ------- */
+function drawChart(results) {
+  const canvas = document.getElementById("chart");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const padL = 70, padR = 20, padT = 30, padB = 64;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const series = results.map((x) => ({
+    name: x.name,
+    perm: x.netPermanentCost,
+    txn: x.transactionTaxes,
+    s455: x.s455Outstanding,
+    peak: x.peakS455,
+  }));
+  const maxVal = Math.max(1, ...series.map((s) => Math.max(s.perm + s.txn + s.s455, s.peak)));
+  // round axis up to a nice number
+  const niceMax = niceCeil(maxVal);
+
+  // axes
+  ctx.strokeStyle = "#dde3ea";
+  ctx.fillStyle = "#5d6b7a";
+  ctx.font = "11px -apple-system, Segoe UI, Roboto, sans-serif";
+  ctx.lineWidth = 1;
+  const ticks = 5;
+  for (let i = 0; i <= ticks; i++) {
+    const v = (niceMax / ticks) * i;
+    const y = padT + plotH - (v / niceMax) * plotH;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    ctx.fillText("£" + shortNum(v), padL - 8, y);
+  }
+
+  const n = series.length;
+  const groupW = plotW / n;
+  const barW = Math.min(70, groupW * 0.5);
+
+  series.forEach((s, i) => {
+    const cx = padL + groupW * i + groupW / 2;
+    const x = cx - barW / 2;
+    // stacked: permanent (red) + transaction taxes (orange) + S455 outstanding (blue)
+    const permH = (s.perm / niceMax) * plotH;
+    const txnH = (s.txn / niceMax) * plotH;
+    const s455H = (s.s455 / niceMax) * plotH;
+    const baseY = padT + plotH;
+
+    ctx.fillStyle = "#b3261e";
+    ctx.fillRect(x, baseY - permH, barW, permH);
+    ctx.fillStyle = "#b4690e";
+    ctx.fillRect(x, baseY - permH - txnH, barW, txnH);
+    ctx.fillStyle = "#0b5a8a";
+    ctx.fillRect(x, baseY - permH - txnH - s455H, barW, s455H);
+
+    // peak S455 marker (dashed line) to show cash locked up at peak
+    const peakH = (s.peak / niceMax) * plotH;
+    ctx.strokeStyle = "#1f9d7a";
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x - 4, baseY - peakH);
+    ctx.lineTo(x + barW + 4, baseY - peakH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // total label
+    const topH = permH + txnH + s455H;
+    ctx.fillStyle = "#1c2733";
+    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+    ctx.font = "bold 11px -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.fillText("£" + shortNum(s.perm + s.txn + s.s455), cx, baseY - topH - 4);
+
+    // x label (wrapped)
+    ctx.fillStyle = "#5d6b7a";
+    ctx.font = "11px -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.textBaseline = "top";
+    wrapLabel(ctx, s.name, cx, baseY + 8, groupW - 6, 13);
+  });
+
+  // legend
+  const legend = [
+    ["#b3261e", "Permanent tax cost"],
+    ["#b4690e", "Transaction taxes (SDLT/CGT)"],
+    ["#0b5a8a", "S455 outstanding at end"],
+    ["#1f9d7a", "Peak S455 (cash locked up)"],
+  ];
+  let lx = padL;
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  legend.forEach(([c, t]) => {
+    ctx.fillStyle = c; ctx.fillRect(lx, 12, 12, 12);
+    ctx.fillStyle = "#1c2733"; ctx.fillText(t, lx + 17, 18);
+    lx += ctx.measureText(t).width + 46;
+  });
+}
+
+function niceCeil(v) {
+  const mag = Math.pow(10, Math.floor(Math.log10(v)));
+  const norm = v / mag;
+  const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+  return step * mag;
+}
+function shortNum(v) {
+  if (v >= 1e6) return (v / 1e6).toFixed(v % 1e6 === 0 ? 0 : 2) + "m";
+  if (v >= 1e3) return (v / 1e3).toFixed(v % 1e3 === 0 ? 0 : 0) + "k";
+  return String(Math.round(v));
+}
+function wrapLabel(ctx, text, cx, y, maxW, lh) {
+  const words = text.split(" ");
+  let line = "", lines = [];
+  words.forEach((w) => {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+    else line = test;
+  });
+  if (line) lines.push(line);
+  lines.slice(0, 3).forEach((l, i) => ctx.fillText(l, cx, y + i * lh));
+}
+
+/* ---- Helpers ------------------------------------------------------------- */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+function commit() {
+  saveState();
+  renderScenarios();
+  renderComparison();
+}
+
+function renderAll() {
+  renderRates();
+  renderScenarios();
+  renderComparison();
+}
+
+/* ---- Toolbar ------------------------------------------------------------- */
+document.getElementById("btn-add").addEventListener("click", () => {
+  state.scenarios.push(blankScenario());
+  commit();
+});
+document.getElementById("btn-example").addEventListener("click", () => {
+  state.scenarios = exampleScenarios();
+  commit();
+});
+document.getElementById("btn-reset").addEventListener("click", () => {
+  if (!confirm("Reset all assumptions and scenarios to defaults?")) return;
+  state = { rates: defaultRates(), scenarios: exampleScenarios() };
+  saveState();
+  renderAll();
+});
+document.getElementById("btn-print").addEventListener("click", () => window.print());
+
+renderAll();
+
+</script>
+</body>
+</html>

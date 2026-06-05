@@ -14,14 +14,15 @@ Built to sit in front of a client and run scenarios live.
 
 ## Running it
 
-No build step, no server, no dependencies. Either:
+It's a **local HTML app** — no server, no database, no dependencies. Either:
 
 - **Open `index.html`** directly in any browser, or
-- Host the folder on **GitHub Pages** (Settings → Pages → deploy from branch) and
-  share the link.
+- Run `node build.js` to produce **`dist/index.html`**, a single self-contained file
+  (CSS + JS inlined) you can email, drop on a shared drive, or open from a USB stick.
 
-Your assumptions and scenarios are saved automatically in the browser
-(localStorage). Use **Print / Save PDF** to produce a hand-out for the client.
+Your assumptions and scenarios are saved automatically in your own browser
+(localStorage) — nothing leaves the machine. Use **Print / Save PDF** to produce a
+hand-out for the client.
 
 ## What it models
 
@@ -32,6 +33,12 @@ Your assumptions and scenarios are saved automatically in the browser
 | **Employer Class 1A NIC** on the BIK | % of the cash equivalent | **15%** |
 | **Dividend tax** | Ordinary / upper / additional rates on top of other income, after the £500 allowance | **10.75% / 35.75% / 39.35%** |
 | **Personal allowance taper** | £1 lost for every £2 of adjusted net income over £100,000 | PA **£12,570**, gone by £125,140 |
+| **CGT** (on a property disposal) | Residential gain after the annual exempt amount; basic-band part at the lower rate, rest at the higher rate; Private Residence Relief toggle for the main home | AEA **£3,000**, rates **18% / 24%** |
+| **SDLT** (on a purchase) | Progressive bands, optional additional-dwelling and non-resident surcharges; only applies to property in England/NI | surcharge **5%**, non-resident **2%** |
+
+Each scenario has an optional **Property transaction taxes** section: enter a purchase
+(SDLT) and/or a disposal (CGT). These one-off taxes are shown separately from the
+income-tax planning and rolled into a **total non-refundable cost** line.
 
 ### Permanent cost vs timing cost
 
@@ -57,6 +64,11 @@ Click **"Load worked example"** to populate these three scenarios:
 | BIK income tax + Class 1A (4 yrs) | ~£67.5k | ~£33k | £0 |
 | **Permanent tax cost** | **~£67.5k** | **~£426k** | **~£393k** |
 | Peak S455 (cash locked up) | £357.5k | £268k | £0 |
+
+In all three the property-tax section is pre-set to show **£0 SDLT** (the Spanish
+purchase is outside SDLT) and **£0 CGT** (the UK home is the main residence, covered
+by Private Residence Relief) — a useful reassurance point for the client. Untick
+those toggles, or change the figures, to model a UK buy-to-let or a non-PRR disposal.
 
 **The planning point this surfaces:** for an additional-rate taxpayer there is
 *no rate saving* from spreading dividends — they are all at 39.35% whether taken
@@ -103,9 +115,10 @@ All of the following are linked inside the app (Guidance panel):
 | File | Purpose |
 |---|---|
 | `index.html` | Page structure and the guidance/legislation links |
-| `engine.js` | Pure tax-calculation engine (also runnable in Node) |
+| `engine.js` | Pure tax-calculation engine (dividends, S455, BIK, CGT, SDLT) — also runnable in Node |
 | `app.js` | UI: state, rendering, scenario editing, comparison table and chart |
 | `styles.css` | Styling, including a print stylesheet for client hand-outs |
+| `build.js` | Inlines the above into a single shareable `dist/index.html` |
 
 The engine is dependency-free and unit-testable in Node:
 
@@ -130,6 +143,9 @@ console.log(E.runScenario({ name:'demo', otherIncome:150000, openingLoan:0,
 - Adjusted net income for the PA taper is simplified to salary + dividends
   (no pension/Gift Aid relief netted off — add those to "other income" manually
   if relevant).
-- The model does not cover Spanish tax, SDLT, CGT on the UK home sale, or the
-  Transactions in Securities / settlements anti-avoidance rules — flag these
-  separately with the client.
+- SDLT/CGT are modelled at a headline level (standard residential SDLT bands; CGT
+  at the residential rates after the annual exempt amount). They do **not** cover
+  multiple-dwellings relief, mixed-use rates, non-resident CGT nuances, or partial
+  PRR/lettings-relief computations beyond the single "taxable fraction" input.
+- The model does not cover Spanish purchase taxes (ITP/IVA), nor the Transactions in
+  Securities / settlements anti-avoidance rules — flag these separately with the client.

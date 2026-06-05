@@ -41,7 +41,87 @@ function defaultRates() {
     officialRate: 0.0375,  // HMRC official rate of interest from 6 April 2025 (reviewed quarterly)
     bikThreshold: 10000,   // no BIK if loan never exceeds this in the year
     class1ARate: 0.15,     // employer Class 1A NIC on the cash equivalent (2025/26 onwards)
+
+    // Capital Gains Tax (on a property disposal — e.g. selling the UK home)
+    cgtAnnualExempt: 3000,        // annual exempt amount 2026/27
+    cgtResidentialBasic: 0.18,    // residential gains within the basic rate band
+    cgtResidentialHigher: 0.24,   // residential gains in the higher/additional band
+
+    // Stamp Duty Land Tax (England & NI only — overseas purchases are outside SDLT)
+    sdltBands: [
+      { upper: 125000, rate: 0 },
+      { upper: 250000, rate: 0.02 },
+      { upper: 925000, rate: 0.05 },
+      { upper: 1500000, rate: 0.10 },
+      { upper: Infinity, rate: 0.12 },
+    ],
+    sdltSurcharge: 0.05,      // higher rates for additional dwellings (on the whole price, from £40k)
+    sdltSurchargeFloor: 40000, // surcharge only applies if price is at least this
+    sdltNonResident: 0.02,    // non-UK-resident surcharge on English/NI residential property
   };
+}
+
+/* Progressive band tax for a single amount (used for SDLT). */
+function progressiveTax(amount, bands) {
+  let tax = 0, prev = 0;
+  for (const b of bands) {
+    if (amount <= prev) break;
+    const slice = Math.min(amount, b.upper) - prev;
+    tax += slice * b.rate;
+    prev = b.upper;
+  }
+  return tax;
+}
+
+/* ---------------------------------------------------------------------------
+ * Stamp Duty Land Tax on a purchase.
+ *   purchase = { price, applies, additionalProperty, nonResident }
+ * `applies` is false for property outside England/NI (e.g. Spain) — SDLT then £0.
+ * Returns { sdlt, standard, surcharge, nonResidentSurcharge, applies }.
+ * ------------------------------------------------------------------------- */
+function computeSDLT(purchase, r) {
+  const price = (purchase && purchase.price) || 0;
+  if (!purchase || !purchase.applies || price <= 0) {
+    return { sdlt: 0, standard: 0, surcharge: 0, nonResidentSurcharge: 0, applies: false, price };
+  }
+  const standard = progressiveTax(price, r.sdltBands);
+  const surcharge = purchase.additionalProperty && price >= r.sdltSurchargeFloor
+    ? price * r.sdltSurcharge : 0;
+  const nonResidentSurcharge = purchase.nonResident ? price * r.sdltNonResident : 0;
+  return {
+    sdlt: standard + surcharge + nonResidentSurcharge,
+    standard, surcharge, nonResidentSurcharge, applies: true, price,
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * Capital Gains Tax on a residential property disposal.
+ *   disposal = { proceeds, cost, expenses, mainResidence, taxableFraction }
+ * If `mainResidence` is true the gain is multiplied by `taxableFraction`
+ * (0 = fully covered by Private Residence Relief, the usual position for a
+ * home lived in throughout). `incomeUsingBand` is the person's taxable income
+ * (after personal allowance) used to work out how much basic-rate band is left.
+ * Returns { gain, taxableGain, cgt, basicPart, higherPart }.
+ * ------------------------------------------------------------------------- */
+function computeCGT(disposal, incomeUsingBand, r) {
+  if (!disposal || !disposal.proceeds) {
+    return { gain: 0, taxableGain: 0, cgt: 0, basicPart: 0, higherPart: 0 };
+  }
+  let gain = Math.max(0, (disposal.proceeds || 0) - (disposal.cost || 0) - (disposal.expenses || 0));
+  if (disposal.mainResidence) {
+    const frac = disposal.taxableFraction != null ? disposal.taxableFraction : 0;
+    gain = gain * frac;
+  }
+  const taxableGain = Math.max(0, gain - r.cgtAnnualExempt);
+
+  // The gain stacks on income; the part within the remaining basic-rate band is
+  // taxed at the lower residential rate, the rest at the higher rate.
+  const remainingBasic = Math.max(0, r.basicBandWidth - Math.max(0, incomeUsingBand));
+  const basicPart = Math.min(taxableGain, remainingBasic);
+  const higherPart = taxableGain - basicPart;
+  const cgt = basicPart * r.cgtResidentialBasic + higherPart * r.cgtResidentialHigher;
+
+  return { gain, taxableGain, cgt, basicPart, higherPart };
 }
 
 /* ---------------------------------------------------------------------------
@@ -156,6 +236,13 @@ function runScenario(scenario, r) {
   // Note: we treat the brought-forward balance as already having borne its s455,
   // so the opening liability is the baseline against which movements are measured.
 
+  // One-off property transaction taxes (optional)
+  const purchase = scenario.purchase || null;   // { year, price, applies, additionalProperty, nonResident }
+  const disposal = scenario.disposal || null;    // { year, proceeds, cost, expenses, mainResidence, taxableFraction }
+  const sdltResult = computeSDLT(purchase, r);
+  const sdltYear = purchase && purchase.year ? purchase.year : 1;
+  const disposalYear = disposal && disposal.year ? disposal.year : (scenario.years || []).length;
+
   const years = [];
   const totals = {
     dividends: 0,
@@ -166,6 +253,8 @@ function runScenario(scenario, r) {
     permanentCost: 0,
     s455Paid: 0,
     s455Refunded: 0,
+    sdlt: 0,
+    cgt: 0,
   };
   let peakS455 = prevS455;
 
@@ -198,8 +287,19 @@ function runScenario(scenario, r) {
 
     const permanentCost = dividendTax + bikIncomeTax + class1A;
 
+    // Attach any one-off property taxes that fall in this year
+    const yearNum = i + 1;
+    const sdlt = purchase && purchase.applies && yearNum === sdltYear ? sdltResult.sdlt : 0;
+    let cgt = 0, cgtDetail = null;
+    if (disposal && disposal.proceeds && yearNum === disposalYear) {
+      // Income occupying the basic-rate band this year (salary + BIK + dividends, after PA)
+      const incomeAfterPA = Math.max(0, (otherIncome + bik + dividends) - computeTax(otherIncome + bik, dividends, r).pa);
+      cgtDetail = computeCGT(disposal, incomeAfterPA, r);
+      cgt = cgtDetail.cgt;
+    }
+
     years.push({
-      year: i + 1,
+      year: yearNum,
       opening,
       drawdown,
       dividends,
@@ -213,8 +313,14 @@ function runScenario(scenario, r) {
       s455Liab,
       s455Movement,
       permanentCost,
+      sdlt,
+      cgt,
+      cgtDetail,
       effectiveDivRate: dividends > 0 ? dividendTax / dividends : 0,
     });
+
+    totals.sdlt += sdlt;
+    totals.cgt += cgt;
 
     totals.dividends += dividends;
     totals.dividendTax += dividendTax;
@@ -231,6 +337,7 @@ function runScenario(scenario, r) {
 
   const closingLoan = opening;
   const s455Outstanding = r.s455Rate * Math.max(0, closingLoan); // still locked up with HMRC at the end
+  const transactionTaxes = totals.sdlt + totals.cgt;
 
   return {
     name: scenario.name,
@@ -241,9 +348,13 @@ function runScenario(scenario, r) {
     peakS455,
     closingLoan,
     s455Outstanding,
+    sdltResult,
+    transactionTaxes,
     // Headline: what it really costs once the dust settles and the loan is cleared.
     // Permanent cost is money gone for good; s455 still outstanding is cash locked up.
     netPermanentCost: totals.permanentCost,
+    // Permanent income-tax cost + one-off transaction taxes (SDLT/CGT) — all non-refundable.
+    totalNonRefundable: totals.permanentCost + transactionTaxes,
     cashLockedUp: s455Outstanding,
   };
 }
@@ -254,5 +365,8 @@ function runAll(scenarios, r) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { defaultRates, sliceTax, computeTax, runScenario, runAll };
+  module.exports = {
+    defaultRates, sliceTax, computeTax, runScenario, runAll,
+    progressiveTax, computeSDLT, computeCGT,
+  };
 }
