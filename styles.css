@@ -254,20 +254,33 @@ textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--bran
   top: 0;
   z-index: 50;
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   padding: 8px 12px;
   background: rgba(255, 255, 255, 0.97);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--line);
   box-shadow: 0 2px 6px rgba(20, 40, 60, .05);
+}
+.topnav-title {
+  display: none;            /* shown only on phones, where the big header is hidden */
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--brand-dark);
+}
+.topnav-chips {
+  display: flex;
+  gap: 8px;
+  flex: 1;
   overflow-x: auto;
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
 }
 .topnav .menu-chip { flex: 0 0 auto; }
-.topnav::-webkit-scrollbar { height: 6px; }
-.topnav::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.topnav-chips::-webkit-scrollbar { height: 6px; }
+.topnav-chips::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 
 /* So a jumped-to section isn't hidden under the sticky bar */
 .panel, details.panel { scroll-margin-top: 64px; }
@@ -333,6 +346,14 @@ textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--bran
 }
 @media (max-width: 560px) {
   .grid.cols-2, .grid.cols-3, .grid.cols-4, .summary-cards, .links-grid { grid-template-columns: 1fr; }
+}
+
+/* Phones: drop the tall branded header and let the slim sticky bar (with a short
+   title) be the top of the screen, maximising room for the tools. */
+@media (max-width: 700px) {
+  header.app-header { display: none; }
+  .topnav-title { display: inline; }
+  .wrap { padding: 14px; }
 }
 
 @media print {
