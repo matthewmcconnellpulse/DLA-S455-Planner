@@ -47,6 +47,21 @@ function defaultRates() {
     cgtResidentialBasic: 0.18,    // residential gains within the basic rate band
     cgtResidentialHigher: 0.24,   // residential gains in the higher/additional band
 
+    // National Insurance (Class 1) — used by the remuneration optimiser
+    niPrimaryThreshold: 12570,    // employee NIC starts (annual, aligned with PA)
+    niUpperEarnings: 50270,       // employee main rate applies up to here, 2% above
+    niEmployeeMain: 0.08,         // employee Class 1 primary main rate
+    niEmployeeUpper: 0.02,        // employee Class 1 above the upper earnings limit
+    niSecondaryThreshold: 5000,   // employer NIC starts (from 6 April 2025)
+    niEmployerRate: 0.15,         // employer (secondary) Class 1 rate
+    employmentAllowance: 10500,   // per-employer relief against employer NIC (not sole-director cos.)
+
+    // Corporation tax — used to cost extraction (salary/pension are deductible; dividends are not)
+    ctSmallRate: 0.19,            // small profits rate (profits up to the lower limit)
+    ctMainRate: 0.25,             // main rate (profits at/above the upper limit)
+    ctMarginalLower: 50000,       // lower limit (divided by number of associated companies)
+    ctMarginalUpper: 250000,      // upper limit (marginal relief applies between the two)
+
     // Stamp Duty Land Tax (England & NI only — overseas purchases are outside SDLT)
     sdltBands: [
       { upper: 125000, rate: 0 },

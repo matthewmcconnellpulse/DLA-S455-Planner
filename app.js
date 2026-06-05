@@ -33,6 +33,17 @@ const RATE_FIELDS = [
   { key: "cgtResidentialHigher", label: "CGT residential — higher", type: "pct", group: "CGT / SDLT" },
   { key: "sdltSurcharge", label: "SDLT additional-dwelling surcharge", type: "pct", group: "CGT / SDLT" },
   { key: "sdltNonResident", label: "SDLT non-resident surcharge", type: "pct", group: "CGT / SDLT" },
+  { key: "niPrimaryThreshold", label: "NIC primary threshold", type: "money", group: "NIC", hint: "employee" },
+  { key: "niUpperEarnings", label: "Upper earnings limit", type: "money", group: "NIC" },
+  { key: "niEmployeeMain", label: "Employee NIC — main", type: "pct", group: "NIC" },
+  { key: "niEmployeeUpper", label: "Employee NIC — above UEL", type: "pct", group: "NIC" },
+  { key: "niSecondaryThreshold", label: "NIC secondary threshold", type: "money", group: "NIC", hint: "employer" },
+  { key: "niEmployerRate", label: "Employer NIC rate", type: "pct", group: "NIC" },
+  { key: "employmentAllowance", label: "Employment Allowance", type: "money", group: "NIC" },
+  { key: "ctSmallRate", label: "CT small-profits rate", type: "pct", group: "Corporation tax" },
+  { key: "ctMainRate", label: "CT main rate", type: "pct", group: "Corporation tax" },
+  { key: "ctMarginalLower", label: "CT lower limit", type: "money", group: "Corporation tax" },
+  { key: "ctMarginalUpper", label: "CT upper limit", type: "money", group: "Corporation tax" },
 ];
 
 /* ---- Worked example: the Spanish-property client ------------------------- */
@@ -105,6 +116,22 @@ function blankScenario() {
   };
 }
 
+/* ---- Remuneration optimiser defaults ------------------------------------- */
+function defaultRemun() {
+  return {
+    availableProfit: 100000,
+    associated: 1,
+    employmentAllowance: false,
+    dividendSplit: "optimise",   // "optimise" | "percent"
+    salaryMode: "optimise",      // "optimise" | "manual"
+    manualSalary: 12570,
+    people: [
+      { name: "Director", otherIncome: 0, isEmployee: true, isShareholder: true, sharePct: 50, pension: 0 },
+      { name: "Spouse", otherIncome: 0, isEmployee: false, isShareholder: true, sharePct: 50, pension: 0 },
+    ],
+  };
+}
+
 /* ---- State --------------------------------------------------------------- */
 let state = loadState();
 
@@ -124,11 +151,12 @@ function loadState() {
         parsed.rates = Object.assign(defaultRates(), parsed.rates);
         parsed.scenarios.forEach(normaliseScenario);
         if (!parsed.emailMeta) parsed.emailMeta = { client: "", sender: "" };
+        if (!parsed.remun) parsed.remun = defaultRemun();
         return parsed;
       }
     }
   } catch (e) { /* ignore */ }
-  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" } };
+  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun() };
 }
 
 function saveState() {
@@ -172,6 +200,7 @@ function renderRates() {
       saveState();
       renderScenarios();
       renderComparison();
+      renderRemunResults();
       document.getElementById("assumptions-year").textContent =
         "· defaults for " + state.rates.taxYearLabel;
     });
@@ -593,8 +622,159 @@ function commit() {
 
 function renderAll() {
   renderRates();
+  renderRemun();
   renderScenarios();
   renderComparison();
+}
+
+/* ---- Remuneration optimiser ---------------------------------------------- */
+function renderRemun() {
+  renderRemunInputs();
+  renderRemunResults();
+}
+
+function renderRemunInputs() {
+  const plan = state.remun;
+  const sel = (b) => (b ? " selected" : "");
+  const company = document.getElementById("remun-company");
+  company.innerHTML = `
+    <label class="field"><span class="lbl">Profit available <span class="hint">(before salaries)</span></span>
+      <input type="number" data-rm="availableProfit" value="${plan.availableProfit}" /></label>
+    <label class="field"><span class="lbl">Associated companies <span class="hint">(divides CT limits)</span></span>
+      <input type="number" data-rm="associated" value="${plan.associated}" /></label>
+    <label class="field"><span class="lbl">Salary strategy</span>
+      <select data-rm="salaryMode">
+        <option value="optimise"${sel(plan.salaryMode === "optimise")}>Optimise automatically</option>
+        <option value="manual"${sel(plan.salaryMode === "manual")}>Set manually</option>
+      </select></label>
+    ${plan.salaryMode === "manual"
+      ? `<label class="field"><span class="lbl">Salary per employee</span><input type="number" data-rm="manualSalary" value="${plan.manualSalary}" /></label>`
+      : ""}
+    <label class="field"><span class="lbl">Dividend split</span>
+      <select data-rm="dividendSplit">
+        <option value="optimise"${sel(plan.dividendSplit === "optimise")}>Optimise (minimise tax)</option>
+        <option value="percent"${sel(plan.dividendSplit === "percent")}>By share %</option>
+      </select></label>
+    <label class="field" style="align-self:end">
+      <label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-rm="employmentAllowance" ${plan.employmentAllowance ? "checked" : ""}/> Can claim Employment Allowance</label>
+    </label>`;
+
+  company.querySelectorAll("[data-rm]").forEach((inp) => {
+    const evt = inp.tagName === "SELECT" || inp.type === "checkbox" ? "change" : "input";
+    inp.addEventListener(evt, (e) => {
+      const key = e.target.dataset.rm;
+      if (e.target.type === "checkbox") plan[key] = e.target.checked;
+      else if (e.target.tagName === "SELECT") plan[key] = e.target.value;
+      else plan[key] = parseFloat(e.target.value) || 0;
+      saveState();
+      if (key === "salaryMode") renderRemunInputs(); // show/hide the manual salary field
+      renderRemunResults();
+    });
+  });
+
+  const tbl = document.getElementById("remun-people");
+  const rows = plan.people.map((p, i) => `
+    <tr data-pi="${i}">
+      <td><input type="text" data-pf="name" value="${escapeAttr(p.name)}" style="text-align:left" /></td>
+      <td><input type="number" data-pf="otherIncome" value="${p.otherIncome}" /></td>
+      <td style="text-align:center"><input type="checkbox" data-pf="isEmployee" ${p.isEmployee ? "checked" : ""} /></td>
+      <td style="text-align:center"><input type="checkbox" data-pf="isShareholder" ${p.isShareholder ? "checked" : ""} /></td>
+      <td><input type="number" data-pf="sharePct" value="${p.sharePct}" /></td>
+      <td><input type="number" data-pf="pension" value="${p.pension}" /></td>
+      <td><button class="small ghost" data-rmdel="${i}" title="Remove">✕</button></td>
+    </tr>`).join("");
+  tbl.innerHTML = `
+    <thead><tr>
+      <th>Person</th><th>Other income</th><th>Employee</th><th>Shareholder</th>
+      <th>Share %</th><th>Employer pension</th><th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>`;
+
+  tbl.querySelectorAll("[data-pf]").forEach((inp) => {
+    const evt = inp.type === "checkbox" ? "change" : "input";
+    inp.addEventListener(evt, (e) => {
+      const pi = parseInt(e.target.closest("tr").dataset.pi, 10);
+      const f = e.target.dataset.pf;
+      if (e.target.type === "checkbox") state.remun.people[pi][f] = e.target.checked;
+      else if (f === "name") state.remun.people[pi][f] = e.target.value;
+      else state.remun.people[pi][f] = parseFloat(e.target.value) || 0;
+      saveState();
+      renderRemunResults();
+    });
+  });
+  tbl.querySelectorAll("[data-rmdel]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      if (state.remun.people.length <= 1) { alert("Keep at least one person."); return; }
+      state.remun.people.splice(parseInt(e.target.dataset.rmdel, 10), 1);
+      saveState();
+      renderRemun();
+    });
+  });
+}
+
+function remunCard(k, v, note, cls) {
+  return `<div class="card"><div class="k">${k}</div><div class="v ${cls || ""}">${v}</div><div class="note">${note || ""}</div></div>`;
+}
+
+function renderRemunResults() {
+  const r = state.rates, plan = state.remun;
+  const host = document.getElementById("remun-results");
+  const result = plan.salaryMode === "manual"
+    ? runRemuneration(plan, plan.manualSalary, r)
+    : optimiseRemuneration(plan, r).best;
+  const t = result.totals;
+
+  const cards = `<div class="summary-cards">
+    ${remunCard(plan.salaryMode === "manual" ? "Salary / employee" : "Optimal salary / employee", gbp(result.salaryPerEmployee), plan.salaryMode === "manual" ? "as entered" : "auto-optimised")}
+    ${remunCard("Marginal CT rate", pct(result.marginalCtRate), "relief on salary & pension", "timing")}
+    ${remunCard("Net to pockets + pension", gbp(t.valueDelivered), "value delivered to the people")}
+    ${remunCard("Effective extraction rate", pct(t.effectiveRate), "all tax ÷ profit extracted", "perm")}
+  </div>`;
+
+  const prows = result.perPerson.map((p) => `
+    <tr>
+      <td>${escapeHtml(p.name)}</td>
+      <td>${gbp0(p.salary)}</td>
+      <td>${gbp0(p.dividends)}</td>
+      <td>${gbp0(p.incomeTaxOnSalary)}</td>
+      <td>${gbp0(p.employeeNIC)}</td>
+      <td>${gbp0(p.dividendTax)}</td>
+      <td>${gbp0(p.pension)}</td>
+      <td><strong>${gbp(p.totalValue)}</strong></td>
+    </tr>`).join("");
+  const peopleTbl = `<div class="table-scroll" style="margin-top:6px"><table class="data">
+    <thead><tr><th>Person</th><th>Salary</th><th>Dividends</th><th>Income tax</th><th>Employee NIC</th><th>Dividend tax</th><th>Pension</th><th>Net + pension</th></tr></thead>
+    <tbody>${prows}</tbody>
+    <tfoot><tr><td>Total</td><td>${gbp(t.salary)}</td><td>${gbp(t.dividends)}</td><td>${gbp(t.incomeTax)}</td><td>${gbp(t.employeeNIC)}</td><td>${gbp(t.dividendTax)}</td><td>${gbp(t.pension)}</td><td>${gbp(t.valueDelivered)}</td></tr></tfoot>
+  </table></div>`;
+
+  const eaNote = t.employmentAllowanceClaimed > 0
+    ? ` (after ${gbp(t.employmentAllowanceClaimed)} Employment Allowance)` : "";
+  const companyTbl = `<div class="table-scroll" style="margin-top:14px"><table class="data">
+    <tbody>
+      <tr><td>Profit available to extract</td><td>${gbp(plan.availableProfit)}</td></tr>
+      <tr><td>Less salaries</td><td>−${gbp(t.salary)}</td></tr>
+      <tr><td>Less employer NIC${eaNote}</td><td>−${gbp(t.employerNIC)}</td></tr>
+      <tr><td>Less employer pension</td><td>−${gbp(t.pension)}</td></tr>
+      <tr><td>Profit chargeable to corporation tax</td><td>${gbp(t.profitBeforeCT)}</td></tr>
+      <tr><td>Corporation tax</td><td>−${gbp(t.corporationTax)}</td></tr>
+      <tr><td>Distributable as dividends</td><td>${gbp(t.distributable)}</td></tr>
+      <tr><td>Total tax (CT + income tax + NIC + dividend tax)</td><td><strong>${gbp(t.totalTax)}</strong></td></tr>
+    </tbody>
+  </table></div>`;
+
+  host.innerHTML = cards + peopleTbl + companyTbl + remunRecommendation(result, plan, r);
+}
+
+function remunRecommendation(result, plan, r) {
+  if (plan.salaryMode === "manual") return "";
+  const s = result.salaryPerEmployee;
+  let why;
+  if (s <= r.niSecondaryThreshold + 1) why = "keeping the salary at the employer-NIC threshold avoids any employer NIC while still drawing a wage";
+  else if (Math.abs(s - r.personalAllowance) < 200) why = "a salary at the personal allowance attracts full corporation-tax relief and pays no income tax — the relief outweighs the small NIC cost";
+  else if (plan.employmentAllowance) why = "with the Employment Allowance covering the employer NIC, a larger salary is efficient because it attracts corporation-tax relief at the marginal rate while dividends do not";
+  else why = "this salary gave the best overall position across the sweep";
+  return `<p class="muted" style="font-size:12.5px;margin-top:12px"><strong>Recommendation:</strong> pay a salary of about ${gbp(s)} per employee — ${why}. The remaining profit is distributed as dividends, split to minimise total tax. Effective extraction rate: <strong>${pct(result.totals.effectiveRate)}</strong>.</p>`;
 }
 
 /* ---- Client email -------------------------------------------------------- */
@@ -719,10 +899,15 @@ document.getElementById("btn-example").addEventListener("click", () => {
 });
 document.getElementById("btn-reset").addEventListener("click", () => {
   if (!confirm("Reset all assumptions and scenarios to defaults?")) return;
-  state = { rates: defaultRates(), scenarios: exampleScenarios() };
+  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun() };
   saveState();
   renderAll();
 });
 document.getElementById("btn-print").addEventListener("click", () => window.print());
+document.getElementById("remun-add").addEventListener("click", () => {
+  state.remun.people.push({ name: "Shareholder", otherIncome: 0, isEmployee: false, isShareholder: true, sharePct: 0, pension: 0 });
+  saveState();
+  renderRemun();
+});
 
 renderAll();

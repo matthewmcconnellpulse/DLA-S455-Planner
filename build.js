@@ -16,12 +16,14 @@ const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
 
 const css = read("styles.css");
 const engine = read("engine.js");
+const remuneration = read("remuneration.js");
 const app = read("app.js");
 let html = read("index.html");
 
 html = html
   .replace('<link rel="stylesheet" href="styles.css" />', `<style>\n${css}\n</style>`)
   .replace('<script src="engine.js"></script>', `<script>\n${engine}\n</script>`)
+  .replace('<script src="remuneration.js"></script>', `<script>\n${remuneration}\n</script>`)
   .replace('<script src="app.js"></script>', `<script>\n${app}\n</script>`);
 
 fs.mkdirSync(path.join(root, "dist"), { recursive: true });
