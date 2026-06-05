@@ -10,6 +10,36 @@ const STORAGE_KEY = "dla-s455-planner-v1";
 // Live home of this tool — included in the client email so they can open it.
 const TOOL_URL = "https://matthewmcconnellpulse.github.io/DLA-S455-Planner/";
 
+/* ---- Planning menu (jump links) ------------------------------------------ */
+const MENU = [
+  { id: "remun-panel", label: "Remuneration optimiser" },
+  { id: "homerent-panel", label: "Use of home" },
+  { id: "childemp-panel", label: "Employ children" },
+  { id: "rlp-panel", label: "Relevant Life Plan" },
+  { id: "dla-panel", label: "Director's loan (S455)" },
+  { id: "compare-panel", label: "Comparison" },
+  { id: "assumptions", label: "Assumptions & rates" },
+  { id: "guidance-panel", label: "HMRC guidance" },
+];
+
+/* ---- Planning checklist (tickable options) ------------------------------- */
+const CHECKLIST = [
+  { key: "salary", label: "Optimal salary / dividend mix", target: "remun-panel" },
+  { key: "pension", label: "Employer pension contributions", target: "remun-panel" },
+  { key: "split", label: "Split dividends with spouse / family", target: "remun-panel" },
+  { key: "useofhome", label: "Use of home (rent to company)", target: "homerent-panel" },
+  { key: "children", label: "Employ children (13+)", target: "childemp-panel" },
+  { key: "rlp", label: "Relevant Life Plan (life cover)", target: "rlp-panel" },
+  { key: "dla", label: "Director's loan & S455 timing", target: "dla-panel" },
+  { key: "assetcgt", label: "Time asset sale for CGT (PRR / BADR)", target: "dla-panel" },
+  { key: "iht", label: "Inheritance / death uplift & IHT", target: "dla-panel" },
+];
+function defaultChecklist() {
+  const o = {};
+  CHECKLIST.forEach((it) => { o[it.key] = { done: false, status: "Relevant", note: "" }; });
+  return o;
+}
+
 /* ---- Rate metadata: drives the editable Assumptions panel ---------------- */
 const RATE_FIELDS = [
   { key: "taxYearLabel", label: "Tax year", type: "text", group: "General" },
@@ -175,11 +205,12 @@ function loadState() {
         if (!parsed.childEmp) parsed.childEmp = defaultChildEmp();
         if (!parsed.rlp) parsed.rlp = defaultRLP();
         if (!parsed.karbon) parsed.karbon = { proxyUrl: "", passphrase: "" };
+        parsed.checklist = Object.assign(defaultChecklist(), parsed.checklist || {});
         return parsed;
       }
     }
   } catch (e) { /* ignore */ }
-  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), karbon: { proxyUrl: "", passphrase: "" } };
+  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), karbon: { proxyUrl: "", passphrase: "" }, checklist: defaultChecklist() };
 }
 
 function saveState() {
@@ -696,6 +727,7 @@ function commit() {
 }
 
 function renderAll() {
+  renderToolkit();
   renderRates();
   renderRemun();
   renderHomeRent();
@@ -991,6 +1023,64 @@ function renderRLPResults() {
   document.getElementById("rlp-results").innerHTML = cards + insight;
 }
 
+/* ---- Planning menu & checklist ------------------------------------------- */
+function jumpTo(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.tagName === "DETAILS") el.open = true;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderToolkit() { renderMenu(); renderChecklist(); }
+
+function renderMenu() {
+  document.getElementById("menu-chips").innerHTML =
+    MENU.map((m) => `<a class="menu-chip" data-jump="${m.id}">${m.label}</a>`).join("");
+  document.querySelectorAll("#menu-chips [data-jump]").forEach((a) =>
+    a.addEventListener("click", () => jumpTo(a.dataset.jump)));
+}
+
+function updateChecklistProgress() {
+  const done = CHECKLIST.filter((it) => (state.checklist[it.key] || {}).done).length;
+  document.getElementById("checklist-progress").textContent = `Considered ${done} of ${CHECKLIST.length}`;
+}
+
+function renderChecklist() {
+  const cl = state.checklist;
+  const rows = CHECKLIST.map((it) => {
+    const s = cl[it.key] || { done: false, status: "Relevant", note: "" };
+    const opt = (v) => `<option ${s.status === v ? "selected" : ""}>${v}</option>`;
+    return `<tr data-k="${it.key}" class="${s.done ? "done" : ""}">
+      <td style="text-align:center"><input type="checkbox" data-cl="done" ${s.done ? "checked" : ""} /></td>
+      <td style="text-align:left"><a class="tool-link" data-jump="${it.target}">${it.label}</a></td>
+      <td><select data-cl="status">${opt("Relevant")}${opt("Applied")}${opt("Not relevant")}</select></td>
+      <td><input type="text" data-cl="note" value="${escapeAttr(s.note || "")}" placeholder="notes…" style="width:100%;text-align:left" /></td>
+    </tr>`;
+  }).join("");
+  document.getElementById("checklist-table").innerHTML =
+    `<thead><tr><th style="width:36px">✓</th><th style="text-align:left">Strategy</th><th style="width:130px">Status</th><th style="text-align:left">Notes</th></tr></thead><tbody>${rows}</tbody>`;
+  updateChecklistProgress();
+
+  const tbl = document.getElementById("checklist-table");
+  tbl.querySelectorAll("[data-jump]").forEach((a) => a.addEventListener("click", () => jumpTo(a.dataset.jump)));
+  tbl.querySelectorAll("[data-cl]").forEach((inp) => {
+    const evt = (inp.type === "checkbox" || inp.tagName === "SELECT") ? "change" : "input";
+    inp.addEventListener(evt, (e) => {
+      const k = e.target.closest("tr").dataset.k;
+      const f = e.target.dataset.cl;
+      if (e.target.type === "checkbox") {
+        state.checklist[k].done = e.target.checked;
+        saveState();
+        e.target.closest("tr").classList.toggle("done", e.target.checked);
+        updateChecklistProgress();
+      } else {
+        state.checklist[k][f] = e.target.value; // status / note — no re-render, keep focus
+        saveState();
+      }
+    });
+  });
+}
+
 /* ---- Client email -------------------------------------------------------- */
 /* Builds a plain-English email summarising the modelled scenarios, spelling out
  * the key caveat — that clearing a director's loan with a future dividend is
@@ -1181,9 +1271,15 @@ document.getElementById("btn-example").addEventListener("click", () => {
 });
 document.getElementById("btn-reset").addEventListener("click", () => {
   if (!confirm("Reset all assumptions and scenarios to defaults?")) return;
-  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), karbon: state.karbon || { proxyUrl: "", passphrase: "" } };
+  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), karbon: state.karbon || { proxyUrl: "", passphrase: "" }, checklist: defaultChecklist() };
   saveState();
   renderAll();
+});
+document.getElementById("checklist-reset").addEventListener("click", () => {
+  if (!confirm("Clear all checklist ticks, statuses and notes?")) return;
+  state.checklist = defaultChecklist();
+  saveState();
+  renderChecklist();
 });
 document.getElementById("btn-print").addEventListener("click", () => window.print());
 document.getElementById("remun-add").addEventListener("click", () => {

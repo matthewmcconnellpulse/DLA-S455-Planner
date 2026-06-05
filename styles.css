@@ -248,6 +248,28 @@ textarea#email-body {
 }
 textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--brand); }
 
+.menu-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.menu-chip {
+  display: inline-block;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--brand-dark);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+.menu-chip:hover { background: var(--soft); border-color: var(--brand); }
+
+#checklist-table td { vertical-align: middle; }
+#checklist-table .done td:nth-child(2) { text-decoration: line-through; color: var(--muted); }
+#checklist-table a.tool-link { color: var(--brand); cursor: pointer; font-weight: 600; }
+#checklist-table select, #checklist-table input[type="text"] { padding: 4px 7px; font-size: 12.5px; }
+.status-applies { color: var(--accent); font-weight: 700; }
+.status-not { color: var(--muted); }
+
 .explainer {
   margin-top: 14px;
   border: 1px solid #cfe3d8;

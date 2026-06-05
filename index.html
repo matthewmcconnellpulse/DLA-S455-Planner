@@ -35,6 +35,25 @@
       <button id="btn-print">🖨 Print / Save PDF</button>
     </div>
 
+    <!-- PLANNING MENU & CHECKLIST ----------------------------------------- -->
+    <div class="panel" id="toolkit-panel">
+      <div class="panel-head">
+        <h2>Planning toolkit</h2>
+        <span class="sub">Jump to a tool, and tick off the options you've considered for this client.</span>
+      </div>
+      <div class="panel-body">
+        <div style="font-weight:600;font-size:12.5px;margin-bottom:6px">Jump to</div>
+        <div class="menu-chips" id="menu-chips"></div>
+        <div style="display:flex;align-items:center;gap:10px;margin:16px 0 6px">
+          <div style="font-weight:600;font-size:12.5px">Client planning checklist</div>
+          <span class="spacer" style="flex:1"></span>
+          <span class="muted" id="checklist-progress" style="font-size:12.5px"></span>
+          <button class="small ghost" id="checklist-reset">Reset checklist</button>
+        </div>
+        <div class="table-scroll"><table class="data" id="checklist-table"></table></div>
+      </div>
+    </div>
+
     <!-- ASSUMPTIONS ------------------------------------------------------- -->
     <details class="panel" id="assumptions">
       <summary>Assumptions &amp; tax rates <span class="sub" id="assumptions-year"></span></summary>
@@ -149,7 +168,7 @@
     </details>
 
     <!-- SCENARIOS --------------------------------------------------------- -->
-    <div class="panel">
+    <div class="panel" id="dla-panel">
       <div class="panel-head">
         <h2>Scenarios</h2>
         <span class="sub">Build one row per year. Dividends are credited to the loan account (reducing the S455 balance); external repayments are cash from elsewhere (e.g. selling a property).</span>
@@ -158,7 +177,7 @@
     </div>
 
     <!-- COMPARISON -------------------------------------------------------- -->
-    <div class="panel">
+    <div class="panel" id="compare-panel">
       <div class="panel-head">
         <h2>Comparison</h2>
         <span class="sub">Permanent tax cost is money gone for good. S455 is refundable once the loan is cleared — a cash-flow / timing cost.</span>
@@ -174,7 +193,7 @@
     </div>
 
     <!-- GUIDANCE ---------------------------------------------------------- -->
-    <div class="panel">
+    <div class="panel" id="guidance-panel">
       <div class="panel-head"><h2>HMRC guidance &amp; legislation</h2></div>
       <div class="panel-body">
         <div class="links-grid">
