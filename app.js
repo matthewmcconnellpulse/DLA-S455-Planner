@@ -142,6 +142,12 @@ function defaultRemun() {
 function defaultHomeRent() {
   return { rent: 6000, allowableCosts: 6000, otherIncome: 50000, companyProfit: 100000, associated: 1 };
 }
+function defaultChildEmp() {
+  return { children: 2, wagePerChild: 12570, childOtherIncome: 0, companyProfit: 100000, associated: 1 };
+}
+function defaultRLP() {
+  return { premium: 1200, directorOtherIncome: 120000, companyProfit: 100000, associated: 1 };
+}
 
 /* ---- State --------------------------------------------------------------- */
 let state = loadState();
@@ -166,12 +172,14 @@ function loadState() {
         if (!parsed.emailMeta) parsed.emailMeta = { client: "", sender: "" };
         if (!parsed.remun) parsed.remun = defaultRemun();
         if (!parsed.homeRent) parsed.homeRent = defaultHomeRent();
+        if (!parsed.childEmp) parsed.childEmp = defaultChildEmp();
+        if (!parsed.rlp) parsed.rlp = defaultRLP();
         if (!parsed.karbon) parsed.karbon = { proxyUrl: "", passphrase: "" };
         return parsed;
       }
     }
   } catch (e) { /* ignore */ }
-  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), karbon: { proxyUrl: "", passphrase: "" } };
+  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), karbon: { proxyUrl: "", passphrase: "" } };
 }
 
 function saveState() {
@@ -217,6 +225,8 @@ function renderRates() {
       renderComparison();
       renderRemunResults();
       renderHomeRentResults();
+      renderChildEmpResults();
+      renderRLPResults();
       document.getElementById("assumptions-year").textContent =
         "· defaults for " + state.rates.taxYearLabel;
     });
@@ -689,6 +699,8 @@ function renderAll() {
   renderRates();
   renderRemun();
   renderHomeRent();
+  renderChildEmp();
+  renderRLP();
   renderScenarios();
   renderComparison();
 }
@@ -835,12 +847,36 @@ function renderRemunResults() {
 function remunRecommendation(result, plan, r) {
   if (plan.salaryMode === "manual") return "";
   const s = result.salaryPerEmployee;
-  let why;
-  if (s <= r.niSecondaryThreshold + 1) why = "keeping the salary at the employer-NIC threshold avoids any employer NIC while still drawing a wage";
-  else if (Math.abs(s - r.personalAllowance) < 200) why = "a salary at the personal allowance attracts full corporation-tax relief and pays no income tax — the relief outweighs the small NIC cost";
-  else if (plan.employmentAllowance) why = "with the Employment Allowance covering the employer NIC, a larger salary is efficient because it attracts corporation-tax relief at the marginal rate while dividends do not";
-  else why = "this salary gave the best overall position across the sweep";
-  return `<p class="muted" style="font-size:12.5px;margin-top:12px"><strong>Recommendation:</strong> pay a salary of about ${gbp(s)} per employee — ${why}. The remaining profit is distributed as dividends, split to minimise total tax. Effective extraction rate: <strong>${pct(result.totals.effectiveRate)}</strong>.</p>`;
+  const mct = result.marginalCtRate;
+
+  // Quantify the benefit: optimal vs taking nothing as salary (all dividends).
+  const noSalary = runRemuneration(plan, 0, r);
+  const gain = result.totals.valueDelivered - noSalary.totals.valueDelivered;
+
+  // The core reason this salary level wins.
+  let headline;
+  if (s <= r.niSecondaryThreshold + 1) {
+    headline = `A salary at the <strong>employer-NIC threshold (${gbp(r.niSecondaryThreshold)})</strong> draws a wage and starts the state-pension qualifying record without triggering any employer NIC.`;
+  } else if (Math.abs(s - r.personalAllowance) < 250) {
+    headline = `A salary at the <strong>personal allowance (${gbp(r.personalAllowance)})</strong> is the sweet spot: it pays <strong>no income tax</strong>, and the corporation-tax relief on it (at ${pct(mct)}) comfortably outweighs the small employee/employer NIC it triggers.`;
+  } else if (plan.employmentAllowance && s > r.personalAllowance) {
+    headline = `Because the <strong>Employment Allowance</strong> wipes out the employer NIC, a larger salary (here ${gbp(s)}) is efficient — every extra pound of salary saves corporation tax at ${pct(mct)} and only bears 20% income tax + 8% employee NIC, which beats paying it as a dividend out of post-tax profit.`;
+  } else {
+    headline = `A salary of ${gbp(s)} gave the best overall position once income tax, NIC and corporation-tax relief are balanced against the dividend route.`;
+  }
+
+  return `
+    <div class="explainer">
+      <div style="font-weight:700;margin-bottom:6px">Why this is the best structure</div>
+      <p style="margin:0 0 8px">${headline}</p>
+      <ul style="margin:0 0 8px;padding-left:18px">
+        <li><strong>Salary &amp; pension are deductible</strong> — they cut the company's corporation tax (relief at the marginal ${pct(mct)} here), so the company funds them out of <em>pre-tax</em> profit.</li>
+        <li><strong>Dividends are not</strong> — they're paid from profit <em>after</em> ${pct(mct)} corporation tax, and are then taxed again on the shareholder. That double layer is why salary up to the allowances/thresholds usually wins, and dividends mop up the rest.</li>
+        <li><strong>Why not more salary?</strong> Above this point each extra pound starts attracting income tax (and employee NIC) faster than the corporation-tax relief it saves, so dividends become the cheaper way to extract the remaining profit.</li>
+        <li><strong>Dividends are split</strong> across the shareholders to use each person's allowance and basic-rate band, minimising the total dividend tax.</li>
+      </ul>
+      <p style="margin:0"><strong>Result:</strong> ${gbp(result.totals.valueDelivered)} delivered for ${gbp(plan.availableProfit)} of profit — an effective extraction rate of <strong>${pct(result.totals.effectiveRate)}</strong>${gain > 1 ? `, about <strong>${gbp(gain)}</strong> better than taking it all as dividends with no salary` : ""}.</p>
+    </div>`;
 }
 
 /* ---- Use of home — rent to company --------------------------------------- */
@@ -894,6 +930,65 @@ function renderHomeRentResults() {
     ? `<p class="muted" style="font-size:12.5px;margin-top:12px"><strong>£${Math.round(res.rent).toLocaleString("en-GB")} extracted at 0% personal tax</strong> — the rent is matched to allowable costs, so there's no taxable profit, while the company still saves ${gbp(res.ctRelief)} in corporation tax.</p>`
     : `<p class="muted" style="font-size:12.5px;margin-top:12px">The rent exceeds the allowable costs, so the ${gbp(res.rentalProfit)} profit is taxed on the director at ${pct(res.marginalIncomeRate)}. Bringing the rent down towards the allowable costs reduces the personal tax while keeping the company's CT relief.</p>`;
   host.innerHTML = cards + tbl + insight;
+}
+
+/* ---- Employing children -------------------------------------------------- */
+function renderChildEmp() { renderChildEmpInputs(); renderChildEmpResults(); }
+function renderChildEmpInputs() {
+  const c = state.childEmp;
+  document.getElementById("childemp-inputs").innerHTML = `
+    <label class="field"><span class="lbl">Number of children</span><input type="number" data-ce="children" value="${c.children}" /></label>
+    <label class="field"><span class="lbl">Wage per child</span><input type="number" data-ce="wagePerChild" value="${c.wagePerChild}" /></label>
+    <label class="field"><span class="lbl">Child's other income</span><input type="number" data-ce="childOtherIncome" value="${c.childOtherIncome}" /></label>
+    <label class="field"><span class="lbl">Company taxable profit <span class="hint">(sets CT rate)</span></span><input type="number" data-ce="companyProfit" value="${c.companyProfit}" /></label>
+    <label class="field"><span class="lbl">Associated companies</span><input type="number" data-ce="associated" value="${c.associated}" /></label>`;
+  document.querySelectorAll("#childemp-inputs [data-ce]").forEach((inp) =>
+    inp.addEventListener("input", (e) => {
+      state.childEmp[e.target.dataset.ce] = parseFloat(e.target.value) || 0;
+      saveState(); renderChildEmpResults();
+    }));
+}
+function renderChildEmpResults() {
+  const res = childEmployment(state.childEmp, state.rates);
+  const cards = `<div class="summary-cards">
+    ${remunCard("Total wages", gbp(res.totalWages), res.count + " child" + (res.count === 1 ? "" : "ren"))}
+    ${remunCard("Income tax on children", gbp(res.totalIncomeTax), res.totalIncomeTax === 0 ? "within their allowance" : "above the allowance", "perm")}
+    ${remunCard("Company CT relief", gbp(res.ctRelief), "wages deductible at " + pct(res.ctRate))}
+    ${remunCard("Net cost to company", gbp(res.netCostToCompany), "wages less CT relief", "timing")}
+  </div>`;
+  const insight = res.totalWages > 0 && res.totalIncomeTax === 0
+    ? `<p class="muted" style="font-size:12.5px;margin-top:12px"><strong>${gbp(res.totalWages)} moved into the children's tax-free allowances</strong> at 0% income tax, while the company saves ${gbp(res.ctRelief)} in corporation tax — provided the wage is justified for real work (see below).</p>`
+    : (res.totalWages > 0 ? `<p class="muted" style="font-size:12.5px;margin-top:12px">Part of the wage exceeds a child's allowance and is taxed at ${pct(state.rates.incomeBasic)} on them; the company still saves ${gbp(res.ctRelief)} in CT.</p>` : "");
+  document.getElementById("childemp-results").innerHTML = cards + insight;
+}
+
+/* ---- Relevant life plan -------------------------------------------------- */
+function renderRLP() { renderRLPInputs(); renderRLPResults(); }
+function renderRLPInputs() {
+  const x = state.rlp;
+  document.getElementById("rlp-inputs").innerHTML = `
+    <label class="field"><span class="lbl">Annual premium</span><input type="number" data-rl="premium" value="${x.premium}" /></label>
+    <label class="field"><span class="lbl">Director's other income <span class="hint">(sets marginal rate)</span></span><input type="number" data-rl="directorOtherIncome" value="${x.directorOtherIncome}" /></label>
+    <label class="field"><span class="lbl">Company taxable profit <span class="hint">(sets CT rate)</span></span><input type="number" data-rl="companyProfit" value="${x.companyProfit}" /></label>
+    <label class="field"><span class="lbl">Associated companies</span><input type="number" data-rl="associated" value="${x.associated}" /></label>`;
+  document.querySelectorAll("#rlp-inputs [data-rl]").forEach((inp) =>
+    inp.addEventListener("input", (e) => {
+      state.rlp[e.target.dataset.rl] = parseFloat(e.target.value) || 0;
+      saveState(); renderRLPResults();
+    }));
+}
+function renderRLPResults() {
+  const res = relevantLifePlan(state.rlp, state.rates);
+  const cards = `<div class="summary-cards">
+    ${remunCard("Net cost via company", gbp(res.companyNetCost), "premium less CT relief at " + pct(res.ctRate), "timing")}
+    ${remunCard("Profit needed — RLP", gbp(res.profitRLP), "premium is deductible")}
+    ${remunCard("Profit needed — personally", gbp(res.profitPersonal), "grossed up for dividend + CT", "perm")}
+    ${remunCard("Profit saved with an RLP", gbp(res.saving), pct(res.savingPct) + " cheaper")}
+  </div>`;
+  const insight = res.premium > 0
+    ? `<p class="muted" style="font-size:12.5px;margin-top:12px">To fund <strong>${gbp(res.premium)}</strong> of cover, paying for it personally would need about <strong>${gbp(res.profitPersonal)}</strong> of company profit (draw ${gbp(res.grossDividendNeeded)} as dividend, then buy the cover from what's left after tax). Through a Relevant Life Plan it needs just <strong>${gbp(res.profitRLP)}</strong> — a saving of <strong>${gbp(res.saving)}</strong> (${pct(res.savingPct)}).</p>`
+    : "";
+  document.getElementById("rlp-results").innerHTML = cards + insight;
 }
 
 /* ---- Client email -------------------------------------------------------- */
@@ -1086,7 +1181,7 @@ document.getElementById("btn-example").addEventListener("click", () => {
 });
 document.getElementById("btn-reset").addEventListener("click", () => {
   if (!confirm("Reset all assumptions and scenarios to defaults?")) return;
-  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent() };
+  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), karbon: state.karbon || { proxyUrl: "", passphrase: "" } };
   saveState();
   renderAll();
 });

@@ -307,10 +307,80 @@ function useOfHomeRent(input, r) {
   };
 }
 
+/* ---------------------------------------------------------------------------
+ * Employing your children (13+). A commercial wage for genuine work is
+ * deductible for the company, and the child has their own personal allowance,
+ * so wages up to the PA are income-tax-free. Under-21s also have a nil employer
+ * NIC band up to the Upper Secondary Threshold, so employer NIC is typically nil
+ * on a modest wage. The wage must be commercially justifiable for actual work
+ * done (wholly & exclusively — see the UI notes / case law).
+ *
+ * input = { children, wagePerChild, childOtherIncome, companyProfit, associated }
+ * ------------------------------------------------------------------------- */
+function childEmployment(input, r) {
+  const wage = Math.max(0, input.wagePerChild || 0);
+  const count = Math.max(0, Math.floor(input.children || 0));
+  const childOther = Math.max(0, input.childOtherIncome || 0);
+  const ctRate = marginalCtRate(input.companyProfit || 0, input.associated || 1, r);
+
+  const itPerChild = _computeTax(childOther + wage, 0, r).total - _computeTax(childOther, 0, r).total;
+  const employerNic = 0; // under-21: nil employer NIC up to the upper secondary threshold
+
+  const totalWages = wage * count;
+  const totalIncomeTax = itPerChild * count;
+  const ctRelief = (totalWages + employerNic) * ctRate;
+
+  return {
+    wage, count, totalWages,
+    itPerChild, totalIncomeTax, employerNic,
+    ctRate, ctRelief,
+    netToChildren: totalWages - totalIncomeTax,
+    netCostToCompany: totalWages + employerNic - ctRelief,
+    effectiveRate: totalWages > 0 ? totalIncomeTax / totalWages : 0,
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * Relevant Life Plan (tax-deductible life cover). The company pays the premium
+ * on a single-life death-in-service policy written into trust: premiums are
+ * generally corporation-tax deductible, with no benefit-in-kind, no NIC and the
+ * payout normally free of income tax and outside the estate for IHT. Compared
+ * with funding the same cover from the director's own (post-tax) income.
+ *
+ * input = { premium, directorOtherIncome, companyProfit, associated }
+ * ------------------------------------------------------------------------- */
+function relevantLifePlan(input, r) {
+  const premium = Math.max(0, input.premium || 0);
+  const other = Math.max(0, input.directorOtherIncome || 0);
+  const ctRate = marginalCtRate(input.companyProfit || 0, input.associated || 1, r);
+
+  // Marginal personal rate on extra income drawn as a dividend to fund cover.
+  const probe = 2000;
+  const divRate = (_computeTax(other, probe, r).total - _computeTax(other, 0, r).total) / probe;
+
+  // Company (RLP) route: premium is deductible, so it consumes its face value of
+  // pre-tax profit; net cost after CT relief is premium × (1 − CT).
+  const profitRLP = premium;
+  const companyNetCost = premium * (1 - ctRate);
+
+  // Personal route: to net £premium the director draws a dividend grossed up for
+  // dividend tax, which itself needs pre-tax profit grossed up for corporation tax.
+  const grossDividendNeeded = divRate < 1 ? premium / (1 - divRate) : premium;
+  const profitPersonal = ctRate < 1 ? grossDividendNeeded / (1 - ctRate) : grossDividendNeeded;
+
+  return {
+    premium, ctRate, divRate,
+    profitRLP, companyNetCost,
+    grossDividendNeeded, profitPersonal,
+    saving: profitPersonal - profitRLP,
+    savingPct: profitPersonal > 0 ? (profitPersonal - profitRLP) / profitPersonal : 0,
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     employeeNIC, employerNIC, corporationTax, marginalCtRate, ctReliefFraction,
     personExtraction, splitDividends, runRemuneration, optimiseRemuneration,
-    useOfHomeRent,
+    useOfHomeRent, childEmployment, relevantLifePlan,
   };
 }
