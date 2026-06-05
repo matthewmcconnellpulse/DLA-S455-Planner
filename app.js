@@ -7,6 +7,9 @@
 
 const STORAGE_KEY = "dla-s455-planner-v1";
 
+// Live home of this tool — included in the client email so they can open it.
+const TOOL_URL = "https://matthewmcconnellpulse.github.io/DLA-S455-Planner/";
+
 /* ---- Rate metadata: drives the editable Assumptions panel ---------------- */
 const RATE_FIELDS = [
   { key: "taxYearLabel", label: "Tax year", type: "text", group: "General" },
@@ -120,11 +123,12 @@ function loadState() {
         // Merge any new default rate keys (e.g. CGT/SDLT added in a later version)
         parsed.rates = Object.assign(defaultRates(), parsed.rates);
         parsed.scenarios.forEach(normaliseScenario);
+        if (!parsed.emailMeta) parsed.emailMeta = { client: "", sender: "" };
         return parsed;
       }
     }
   } catch (e) { /* ignore */ }
-  return { rates: defaultRates(), scenarios: exampleScenarios() };
+  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" } };
 }
 
 function saveState() {
@@ -592,6 +596,117 @@ function renderAll() {
   renderScenarios();
   renderComparison();
 }
+
+/* ---- Client email -------------------------------------------------------- */
+/* Builds a plain-English email summarising the modelled scenarios, spelling out
+ * the key caveat — that clearing a director's loan with a future dividend is
+ * itself taxable — and linking to this tool so the client can explore / clear
+ * the loan down. Returns { subject, body }. */
+function buildClientEmail() {
+  const r = state.rates;
+  const results = state.scenarios.map((s) => runScenario(s, r));
+  const meta = state.emailMeta || { client: "", sender: "" };
+  const client = (meta.client || "").trim() || "[client name]";
+  const sender = (meta.sender || "").trim() || "[your name]";
+
+  // Headline figure = the largest total new borrowing across the scenarios.
+  const totalDrawdown = (scn) => (scn.years || []).reduce((t, y) => t + (y.drawdown || 0), 0);
+  const headline = Math.max(0, ...state.scenarios.map(totalDrawdown));
+  const amountPhrase = headline > 0 ? `the ${gbp(headline)} withdrawal` : "the withdrawal";
+
+  // "Lowest cost once the loan is eventually cleared" = non-refundable + S455 still locked up.
+  const trueCost = (x) => x.totalNonRefundable + x.s455Outstanding;
+  let best = results[0];
+  results.forEach((x) => { if (trueCost(x) < trueCost(best)) best = x; });
+
+  const L = [];
+  L.push(`Dear ${client},`, "");
+  L.push(`Thank you for your time. Following our discussion, here is a summary of the options we modelled for funding ${amountPhrase} — comparing taking the money out of the company as a director's loan against declaring it as dividends.`, "");
+
+  L.push("SUMMARY OF THE OPTIONS");
+  results.forEach((x) => {
+    L.push(`• ${x.name}`);
+    L.push(`    - Permanent tax cost: ${gbp(x.netPermanentCost)} (dividend tax + benefit-in-kind income tax + employer Class 1A NIC)`);
+    if (x.transactionTaxes > 0) {
+      L.push(`    - One-off SDLT/CGT on the property transaction: ${gbp(x.transactionTaxes)}`);
+    }
+    if (x.peakS455 > 0) {
+      L.push(`    - S455 charge at its peak (refundable once the loan is repaid): ${gbp(x.peakS455)}`);
+    }
+    let total = `    - Total non-refundable cost: ${gbp(x.totalNonRefundable)}`;
+    if (x.s455Outstanding > 0) {
+      total += `, with a further ${gbp(x.s455Outstanding)} of S455 still locked up with HMRC at the end`;
+    }
+    L.push(total);
+  });
+  L.push("");
+  if (results.length > 1) {
+    L.push(`On these figures, the lowest overall cost is "${best.name}".`, "");
+  }
+
+  L.push("THE IMPORTANT CAVEAT WITH THE DIRECTOR'S LOAN ROUTE");
+  L.push(`Taking the money as a director's loan looks cheaper up front: the only immediate tax is the S455 charge — currently ${pct(r.s455Rate)} of the balance still outstanding nine months and a day after the company year end — and that charge is refundable once the loan is repaid, plus a small benefit-in-kind cost on the cheap loan.`, "");
+  L.push("However, the loan still has to be repaid. If you later clear it by declaring a dividend (rather than repaying it from another source, such as the sale of a property), that dividend is itself taxable in the year it is declared, at the dividend rates then in force. In other words, a director's loan defers the dividend tax — it does not remove it: the tax falls due when the loan is eventually cleared with a dividend. For an additional-rate taxpayer there is no rate saving from spreading the dividends over several years, so clearing a loan this way can end up being the most expensive route overall.", "");
+
+  L.push("REVIEW THE FIGURES / MODEL CLEARING THE LOAN DOWN");
+  L.push("You can review all of the figures, change any of the assumptions, and model how to clear the director's loan down here:");
+  L.push(TOOL_URL, "");
+
+  L.push("These figures are estimates to support our planning conversation and are not formal tax advice; we will confirm the final numbers before anything is actioned.", "");
+  L.push("Kind regards,", sender);
+
+  return { subject: "Funding options: director's loan vs dividends", body: L.join("\n") };
+}
+
+const emailModal = () => document.getElementById("email-modal");
+function regenEmail() {
+  const { subject, body } = buildClientEmail();
+  document.getElementById("email-subject").value = subject;
+  document.getElementById("email-body").value = body;
+}
+function openEmailModal() {
+  const meta = state.emailMeta || { client: "", sender: "" };
+  document.getElementById("email-client").value = meta.client || "";
+  document.getElementById("email-sender").value = meta.sender || "";
+  regenEmail();
+  emailModal().hidden = false;
+}
+function closeEmailModal() { emailModal().hidden = true; }
+
+document.getElementById("btn-email").addEventListener("click", openEmailModal);
+document.getElementById("email-close").addEventListener("click", closeEmailModal);
+document.getElementById("email-close2").addEventListener("click", closeEmailModal);
+emailModal().addEventListener("click", (e) => { if (e.target === emailModal()) closeEmailModal(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !emailModal().hidden) closeEmailModal();
+});
+["email-client", "email-sender"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", (e) => {
+    if (!state.emailMeta) state.emailMeta = { client: "", sender: "" };
+    state.emailMeta[id === "email-client" ? "client" : "sender"] = e.target.value;
+    saveState();
+    regenEmail();
+  });
+});
+document.getElementById("email-copy").addEventListener("click", async () => {
+  const btn = document.getElementById("email-copy");
+  const body = document.getElementById("email-body").value;
+  try {
+    await navigator.clipboard.writeText(body);
+    const old = btn.textContent;
+    btn.textContent = "Copied ✓";
+    setTimeout(() => { btn.textContent = old; }, 1500);
+  } catch (e) {
+    const ta = document.getElementById("email-body");
+    ta.focus(); ta.select();
+    alert("Press Ctrl/Cmd + C to copy the selected text.");
+  }
+});
+document.getElementById("email-mailto").addEventListener("click", () => {
+  const subject = document.getElementById("email-subject").value;
+  const body = document.getElementById("email-body").value;
+  window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+});
 
 /* ---- Toolbar ------------------------------------------------------------- */
 document.getElementById("btn-add").addEventListener("click", () => {

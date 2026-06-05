@@ -29,6 +29,7 @@
       <button class="primary" id="btn-add">+ Add scenario</button>
       <button id="btn-example">Load worked example (Spanish property)</button>
       <button id="btn-reset" class="ghost">Reset to defaults</button>
+      <button id="btn-email">✉ Draft client email</button>
       <span class="spacer"></span>
       <button id="btn-print">🖨 Print / Save PDF</button>
     </div>
@@ -126,6 +127,40 @@
           <li><strong>Tax on tax:</strong> if a dividend is declared to fund a tax bill, that dividend is itself taxed — model it by entering the gross dividend needed. For an additional-rate payer there is no rate saving from spreading dividends (all at 39.35%), so declaring dividends purely to clear a refundable S455 charge can be the most expensive route.</li>
           <li><strong>Bands &amp; allowance:</strong> the model applies the personal allowance taper (£1 lost per £2 over £100k) using adjusted net income, and taxes dividends across the ordinary / upper / additional bands on top of other income.</li>
         </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMAIL MODAL ------------------------------------------------------- -->
+  <div class="modal-overlay" id="email-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="email-modal-title">
+      <div class="modal-head">
+        <h2 id="email-modal-title">Draft client email</h2>
+        <button class="small ghost" id="email-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted" style="margin-top:0;font-size:12.5px">
+          A plain-English summary of the scenarios above, including the caveat that clearing a
+          director's loan with a future dividend is taxable, and a link to this tool. Edit anything
+          below, then copy it or open it in your email app.
+        </p>
+        <div class="grid cols-2" style="margin-bottom:12px">
+          <label class="field"><span class="lbl">Client name</span>
+            <input type="text" id="email-client" placeholder="e.g. Jane" /></label>
+          <label class="field"><span class="lbl">Your name / sign-off</span>
+            <input type="text" id="email-sender" placeholder="e.g. Matthew, Pulse Accountants" /></label>
+        </div>
+        <label class="field"><span class="lbl">Subject</span>
+          <input type="text" id="email-subject" /></label>
+        <label class="field" style="margin-top:10px">
+          <span class="lbl">Email body <span class="hint">(editable)</span></span>
+          <textarea id="email-body" rows="18"></textarea></label>
+      </div>
+      <div class="modal-foot">
+        <button class="primary" id="email-copy">Copy to clipboard</button>
+        <button id="email-mailto">Open in email app</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="email-close2">Close</button>
       </div>
     </div>
   </div>
