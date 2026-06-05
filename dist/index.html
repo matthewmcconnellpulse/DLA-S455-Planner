@@ -255,6 +255,30 @@ textarea#email-body {
 }
 textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--brand); }
 
+/* Sticky top menu — locks to the top of the screen (esp. on phones) */
+.topnav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.97);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 2px 6px rgba(20, 40, 60, .05);
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+.topnav .menu-chip { flex: 0 0 auto; }
+.topnav::-webkit-scrollbar { height: 6px; }
+.topnav::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+/* So a jumped-to section isn't hidden under the sticky bar */
+.panel, details.panel { scroll-margin-top: 64px; }
+
 .menu-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .menu-chip {
   display: inline-block;
@@ -319,7 +343,7 @@ textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--bran
 }
 
 @media print {
-  .toolbar, .disclaimer button, button, details.panel:not([open]) { display: none !important; }
+  .toolbar, .disclaimer button, button, .topnav, details.panel:not([open]) { display: none !important; }
   body { background: #fff; }
   .panel { box-shadow: none; break-inside: avoid; }
   header.app-header { background: var(--brand-dark) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -339,6 +363,9 @@ textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--bran
       tax when dividends are taken to fund a tax bill.
     </p>
   </header>
+
+  <!-- Sticky menu — stays locked to the top of the screen while scrolling -->
+  <nav class="topnav" id="topnav" aria-label="Jump to a planning tool"></nav>
 
   <div class="wrap">
     <div class="disclaimer">
@@ -365,9 +392,7 @@ textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--bran
         <span class="sub">Jump to a tool, and tick off the options you've considered for this client.</span>
       </div>
       <div class="panel-body">
-        <div style="font-weight:600;font-size:12.5px;margin-bottom:6px">Jump to</div>
-        <div class="menu-chips" id="menu-chips"></div>
-        <div style="display:flex;align-items:center;gap:10px;margin:16px 0 6px">
+        <div style="display:flex;align-items:center;gap:10px;margin:0 0 6px">
           <div style="font-weight:600;font-size:12.5px">Client planning checklist</div>
           <span class="spacer" style="flex:1"></span>
           <span class="muted" id="checklist-progress" style="font-size:12.5px"></span>
@@ -2505,9 +2530,9 @@ function jumpTo(id) {
 function renderToolkit() { renderMenu(); renderChecklist(); }
 
 function renderMenu() {
-  document.getElementById("menu-chips").innerHTML =
+  document.getElementById("topnav").innerHTML =
     MENU.map((m) => `<a class="menu-chip" data-jump="${m.id}">${m.label}</a>`).join("");
-  document.querySelectorAll("#menu-chips [data-jump]").forEach((a) =>
+  document.querySelectorAll("#topnav [data-jump]").forEach((a) =>
     a.addEventListener("click", () => jumpTo(a.dataset.jump)));
 }
 
