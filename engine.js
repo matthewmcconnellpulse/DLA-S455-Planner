@@ -42,10 +42,16 @@ function defaultRates() {
     bikThreshold: 10000,   // no BIK if loan never exceeds this in the year
     class1ARate: 0.15,     // employer Class 1A NIC on the cash equivalent (2025/26 onwards)
 
-    // Capital Gains Tax (on a property disposal — e.g. selling the UK home)
+    // Capital Gains Tax (on a disposal used to repay the loan)
     cgtAnnualExempt: 3000,        // annual exempt amount 2026/27
     cgtResidentialBasic: 0.18,    // residential gains within the basic rate band
     cgtResidentialHigher: 0.24,   // residential gains in the higher/additional band
+    cgtNonResBasic: 0.18,         // non-residential / other gains, basic rate band
+    cgtNonResHigher: 0.24,        // non-residential / other gains, higher/additional band
+    badrRate: 0.18,               // Business Asset Disposal Relief (2026/27; was 10% to Apr-25, 14% to Apr-26)
+    badrLifetimeLimit: 1000000,   // BADR lifetime limit on qualifying gains
+    ihtRate: 0.40,                // inheritance tax rate above the nil-rate band
+    ihtNilRateBand: 325000,       // IHT nil-rate band
 
     // National Insurance (Class 1) — used by the remuneration optimiser
     niPrimaryThreshold: 12570,    // employee NIC starts (annual, aligned with PA)
@@ -110,33 +116,66 @@ function computeSDLT(purchase, r) {
 }
 
 /* ---------------------------------------------------------------------------
- * Capital Gains Tax on a residential property disposal.
- *   disposal = { proceeds, cost, expenses, mainResidence, taxableFraction }
- * If `mainResidence` is true the gain is multiplied by `taxableFraction`
- * (0 = fully covered by Private Residence Relief, the usual position for a
- * home lived in throughout). `incomeUsingBand` is the person's taxable income
- * (after personal allowance) used to work out how much basic-rate band is left.
- * Returns { gain, taxableGain, cgt, basicPart, higherPart }.
+ * Capital Gains Tax (or, for the inheritance route, IHT) on the asset sold to
+ * repay the loan. The asset `type` selects the treatment:
+ *
+ *   "residential" — the UK home etc. Private Residence Relief applies when
+ *                   `mainResidence` is true (gain × `taxableFraction`, 0 = fully
+ *                   relieved); taxed at the residential CGT rates.
+ *   "business"    — sale of the business/shares. Business Asset Disposal Relief
+ *                   at the BADR rate on gains up to the lifetime limit, with any
+ *                   excess at the main (non-residential) CGT rates.
+ *   "inheritance" — asset kept until death: rebased to market value, so no CGT in
+ *                   life. Optional IHT estimate (value above the nil-rate band).
+ *   "other"       — any other chargeable asset: main CGT rates, no relief.
+ *
+ *   disposal = { type, proceeds, cost, expenses, mainResidence, taxableFraction, estimateIHT }
+ * `incomeUsingBand` is the person's taxable income (after PA) used to see how
+ * much basic-rate band is left. Returns { gain, taxableGain, cgt, basicPart, higherPart, iht, type }.
  * ------------------------------------------------------------------------- */
 function computeCGT(disposal, incomeUsingBand, r) {
+  const type = disposal ? (disposal.type || "residential") : "residential";
   if (!disposal || !disposal.proceeds) {
-    return { gain: 0, taxableGain: 0, cgt: 0, basicPart: 0, higherPart: 0 };
+    return { gain: 0, taxableGain: 0, cgt: 0, basicPart: 0, higherPart: 0, iht: 0, type };
   }
   let gain = Math.max(0, (disposal.proceeds || 0) - (disposal.cost || 0) - (disposal.expenses || 0));
-  if (disposal.mainResidence) {
+
+  // Inheritance: assets are rebased to market value on death, so no CGT in life.
+  if (type === "inheritance") {
+    const iht = disposal.estimateIHT
+      ? Math.max(0, (disposal.proceeds || 0) - (r.ihtNilRateBand || 0)) * (r.ihtRate || 0)
+      : 0;
+    return { gain, taxableGain: 0, cgt: 0, basicPart: 0, higherPart: 0, iht, type };
+  }
+
+  // Private residence relief only applies to a residential main home.
+  if (type === "residential" && disposal.mainResidence) {
     const frac = disposal.taxableFraction != null ? disposal.taxableFraction : 0;
     gain = gain * frac;
   }
-  const taxableGain = Math.max(0, gain - r.cgtAnnualExempt);
 
-  // The gain stacks on income; the part within the remaining basic-rate band is
-  // taxed at the lower residential rate, the rest at the higher rate.
+  const taxableGain = Math.max(0, gain - r.cgtAnnualExempt);
   const remainingBasic = Math.max(0, r.basicBandWidth - Math.max(0, incomeUsingBand));
   const basicPart = Math.min(taxableGain, remainingBasic);
   const higherPart = taxableGain - basicPart;
-  const cgt = basicPart * r.cgtResidentialBasic + higherPart * r.cgtResidentialHigher;
 
-  return { gain, taxableGain, cgt, basicPart, higherPart };
+  let cgt;
+  if (type === "business") {
+    // BADR on gains up to the lifetime limit; excess at the main CGT rates.
+    const badrAmount = Math.min(taxableGain, r.badrLifetimeLimit != null ? r.badrLifetimeLimit : Infinity);
+    const excess = taxableGain - badrAmount;
+    // BADR gains use up the basic-rate band first, so the excess sits above it.
+    const basicLeftAfterBadr = Math.max(0, remainingBasic - badrAmount);
+    const excessBasic = Math.min(excess, basicLeftAfterBadr);
+    const excessHigher = excess - excessBasic;
+    cgt = badrAmount * r.badrRate + excessBasic * r.cgtNonResBasic + excessHigher * r.cgtNonResHigher;
+  } else if (type === "residential") {
+    cgt = basicPart * r.cgtResidentialBasic + higherPart * r.cgtResidentialHigher;
+  } else { // "other" — non-residential asset, no relief
+    cgt = basicPart * r.cgtNonResBasic + higherPart * r.cgtNonResHigher;
+  }
+
+  return { gain, taxableGain, cgt, basicPart, higherPart, iht: 0, type };
 }
 
 /* ---------------------------------------------------------------------------
@@ -270,6 +309,7 @@ function runScenario(scenario, r) {
     s455Refunded: 0,
     sdlt: 0,
     cgt: 0,
+    iht: 0,
   };
   let peakS455 = prevS455;
 
@@ -305,12 +345,13 @@ function runScenario(scenario, r) {
     // Attach any one-off property taxes that fall in this year
     const yearNum = i + 1;
     const sdlt = purchase && purchase.applies && yearNum === sdltYear ? sdltResult.sdlt : 0;
-    let cgt = 0, cgtDetail = null;
+    let cgt = 0, iht = 0, cgtDetail = null;
     if (disposal && disposal.proceeds && yearNum === disposalYear) {
       // Income occupying the basic-rate band this year (salary + BIK + dividends, after PA)
       const incomeAfterPA = Math.max(0, (otherIncome + bik + dividends) - computeTax(otherIncome + bik, dividends, r).pa);
       cgtDetail = computeCGT(disposal, incomeAfterPA, r);
       cgt = cgtDetail.cgt;
+      iht = cgtDetail.iht || 0;
     }
 
     years.push({
@@ -330,12 +371,14 @@ function runScenario(scenario, r) {
       permanentCost,
       sdlt,
       cgt,
+      iht,
       cgtDetail,
       effectiveDivRate: dividends > 0 ? dividendTax / dividends : 0,
     });
 
     totals.sdlt += sdlt;
     totals.cgt += cgt;
+    totals.iht += iht;
 
     totals.dividends += dividends;
     totals.dividendTax += dividendTax;

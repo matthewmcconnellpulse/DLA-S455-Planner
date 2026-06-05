@@ -536,10 +536,16 @@ function defaultRates() {
     bikThreshold: 10000,   // no BIK if loan never exceeds this in the year
     class1ARate: 0.15,     // employer Class 1A NIC on the cash equivalent (2025/26 onwards)
 
-    // Capital Gains Tax (on a property disposal — e.g. selling the UK home)
+    // Capital Gains Tax (on a disposal used to repay the loan)
     cgtAnnualExempt: 3000,        // annual exempt amount 2026/27
     cgtResidentialBasic: 0.18,    // residential gains within the basic rate band
     cgtResidentialHigher: 0.24,   // residential gains in the higher/additional band
+    cgtNonResBasic: 0.18,         // non-residential / other gains, basic rate band
+    cgtNonResHigher: 0.24,        // non-residential / other gains, higher/additional band
+    badrRate: 0.18,               // Business Asset Disposal Relief (2026/27; was 10% to Apr-25, 14% to Apr-26)
+    badrLifetimeLimit: 1000000,   // BADR lifetime limit on qualifying gains
+    ihtRate: 0.40,                // inheritance tax rate above the nil-rate band
+    ihtNilRateBand: 325000,       // IHT nil-rate band
 
     // National Insurance (Class 1) — used by the remuneration optimiser
     niPrimaryThreshold: 12570,    // employee NIC starts (annual, aligned with PA)
@@ -604,33 +610,66 @@ function computeSDLT(purchase, r) {
 }
 
 /* ---------------------------------------------------------------------------
- * Capital Gains Tax on a residential property disposal.
- *   disposal = { proceeds, cost, expenses, mainResidence, taxableFraction }
- * If `mainResidence` is true the gain is multiplied by `taxableFraction`
- * (0 = fully covered by Private Residence Relief, the usual position for a
- * home lived in throughout). `incomeUsingBand` is the person's taxable income
- * (after personal allowance) used to work out how much basic-rate band is left.
- * Returns { gain, taxableGain, cgt, basicPart, higherPart }.
+ * Capital Gains Tax (or, for the inheritance route, IHT) on the asset sold to
+ * repay the loan. The asset `type` selects the treatment:
+ *
+ *   "residential" — the UK home etc. Private Residence Relief applies when
+ *                   `mainResidence` is true (gain × `taxableFraction`, 0 = fully
+ *                   relieved); taxed at the residential CGT rates.
+ *   "business"    — sale of the business/shares. Business Asset Disposal Relief
+ *                   at the BADR rate on gains up to the lifetime limit, with any
+ *                   excess at the main (non-residential) CGT rates.
+ *   "inheritance" — asset kept until death: rebased to market value, so no CGT in
+ *                   life. Optional IHT estimate (value above the nil-rate band).
+ *   "other"       — any other chargeable asset: main CGT rates, no relief.
+ *
+ *   disposal = { type, proceeds, cost, expenses, mainResidence, taxableFraction, estimateIHT }
+ * `incomeUsingBand` is the person's taxable income (after PA) used to see how
+ * much basic-rate band is left. Returns { gain, taxableGain, cgt, basicPart, higherPart, iht, type }.
  * ------------------------------------------------------------------------- */
 function computeCGT(disposal, incomeUsingBand, r) {
+  const type = disposal ? (disposal.type || "residential") : "residential";
   if (!disposal || !disposal.proceeds) {
-    return { gain: 0, taxableGain: 0, cgt: 0, basicPart: 0, higherPart: 0 };
+    return { gain: 0, taxableGain: 0, cgt: 0, basicPart: 0, higherPart: 0, iht: 0, type };
   }
   let gain = Math.max(0, (disposal.proceeds || 0) - (disposal.cost || 0) - (disposal.expenses || 0));
-  if (disposal.mainResidence) {
+
+  // Inheritance: assets are rebased to market value on death, so no CGT in life.
+  if (type === "inheritance") {
+    const iht = disposal.estimateIHT
+      ? Math.max(0, (disposal.proceeds || 0) - (r.ihtNilRateBand || 0)) * (r.ihtRate || 0)
+      : 0;
+    return { gain, taxableGain: 0, cgt: 0, basicPart: 0, higherPart: 0, iht, type };
+  }
+
+  // Private residence relief only applies to a residential main home.
+  if (type === "residential" && disposal.mainResidence) {
     const frac = disposal.taxableFraction != null ? disposal.taxableFraction : 0;
     gain = gain * frac;
   }
-  const taxableGain = Math.max(0, gain - r.cgtAnnualExempt);
 
-  // The gain stacks on income; the part within the remaining basic-rate band is
-  // taxed at the lower residential rate, the rest at the higher rate.
+  const taxableGain = Math.max(0, gain - r.cgtAnnualExempt);
   const remainingBasic = Math.max(0, r.basicBandWidth - Math.max(0, incomeUsingBand));
   const basicPart = Math.min(taxableGain, remainingBasic);
   const higherPart = taxableGain - basicPart;
-  const cgt = basicPart * r.cgtResidentialBasic + higherPart * r.cgtResidentialHigher;
 
-  return { gain, taxableGain, cgt, basicPart, higherPart };
+  let cgt;
+  if (type === "business") {
+    // BADR on gains up to the lifetime limit; excess at the main CGT rates.
+    const badrAmount = Math.min(taxableGain, r.badrLifetimeLimit != null ? r.badrLifetimeLimit : Infinity);
+    const excess = taxableGain - badrAmount;
+    // BADR gains use up the basic-rate band first, so the excess sits above it.
+    const basicLeftAfterBadr = Math.max(0, remainingBasic - badrAmount);
+    const excessBasic = Math.min(excess, basicLeftAfterBadr);
+    const excessHigher = excess - excessBasic;
+    cgt = badrAmount * r.badrRate + excessBasic * r.cgtNonResBasic + excessHigher * r.cgtNonResHigher;
+  } else if (type === "residential") {
+    cgt = basicPart * r.cgtResidentialBasic + higherPart * r.cgtResidentialHigher;
+  } else { // "other" — non-residential asset, no relief
+    cgt = basicPart * r.cgtNonResBasic + higherPart * r.cgtNonResHigher;
+  }
+
+  return { gain, taxableGain, cgt, basicPart, higherPart, iht: 0, type };
 }
 
 /* ---------------------------------------------------------------------------
@@ -764,6 +803,7 @@ function runScenario(scenario, r) {
     s455Refunded: 0,
     sdlt: 0,
     cgt: 0,
+    iht: 0,
   };
   let peakS455 = prevS455;
 
@@ -799,12 +839,13 @@ function runScenario(scenario, r) {
     // Attach any one-off property taxes that fall in this year
     const yearNum = i + 1;
     const sdlt = purchase && purchase.applies && yearNum === sdltYear ? sdltResult.sdlt : 0;
-    let cgt = 0, cgtDetail = null;
+    let cgt = 0, iht = 0, cgtDetail = null;
     if (disposal && disposal.proceeds && yearNum === disposalYear) {
       // Income occupying the basic-rate band this year (salary + BIK + dividends, after PA)
       const incomeAfterPA = Math.max(0, (otherIncome + bik + dividends) - computeTax(otherIncome + bik, dividends, r).pa);
       cgtDetail = computeCGT(disposal, incomeAfterPA, r);
       cgt = cgtDetail.cgt;
+      iht = cgtDetail.iht || 0;
     }
 
     years.push({
@@ -824,12 +865,14 @@ function runScenario(scenario, r) {
       permanentCost,
       sdlt,
       cgt,
+      iht,
       cgtDetail,
       effectiveDivRate: dividends > 0 ? dividendTax / dividends : 0,
     });
 
     totals.sdlt += sdlt;
     totals.cgt += cgt;
+    totals.iht += iht;
 
     totals.dividends += dividends;
     totals.dividendTax += dividendTax;
@@ -1236,6 +1279,12 @@ const RATE_FIELDS = [
   { key: "cgtResidentialHigher", label: "CGT residential — higher", type: "pct", group: "CGT / SDLT" },
   { key: "sdltSurcharge", label: "SDLT additional-dwelling surcharge", type: "pct", group: "CGT / SDLT" },
   { key: "sdltNonResident", label: "SDLT non-resident surcharge", type: "pct", group: "CGT / SDLT" },
+  { key: "cgtNonResBasic", label: "CGT non-residential — basic", type: "pct", group: "CGT / SDLT" },
+  { key: "cgtNonResHigher", label: "CGT non-residential — higher", type: "pct", group: "CGT / SDLT" },
+  { key: "badrRate", label: "BADR rate", type: "pct", group: "CGT / SDLT", hint: "business asset disposal relief" },
+  { key: "badrLifetimeLimit", label: "BADR lifetime limit", type: "money", group: "CGT / SDLT" },
+  { key: "ihtRate", label: "Inheritance tax rate", type: "pct", group: "CGT / SDLT" },
+  { key: "ihtNilRateBand", label: "IHT nil-rate band", type: "money", group: "CGT / SDLT" },
   { key: "niPrimaryThreshold", label: "NIC primary threshold", type: "money", group: "NIC", hint: "employee" },
   { key: "niUpperEarnings", label: "Upper earnings limit", type: "money", group: "NIC" },
   { key: "niEmployeeMain", label: "Employee NIC — main", type: "pct", group: "NIC" },
@@ -1346,6 +1395,8 @@ let state = loadState();
 function normaliseScenario(scn) {
   if (!scn.purchase) scn.purchase = { year: 1, price: 0, applies: false, additionalProperty: true, nonResident: false };
   if (!scn.disposal) scn.disposal = { year: scn.years ? scn.years.length : 4, proceeds: 0, cost: 0, expenses: 0, mainResidence: true, taxableFraction: 0 };
+  if (!scn.disposal.type) scn.disposal.type = "residential";
+  if (scn.disposal.estimateIHT == null) scn.disposal.estimateIHT = false;
   return scn;
 }
 
@@ -1415,6 +1466,53 @@ function renderRates() {
         "· defaults for " + state.rates.taxYearLabel;
     });
   });
+}
+
+/* ---- Render: the "asset sold to repay the loan" block (CGT / IHT) -------- */
+const ASSET_TYPES = [
+  { key: "residential", label: "🏠 House sale" },
+  { key: "business", label: "🏢 Business sale (BADR)" },
+  { key: "inheritance", label: "🪦 Inheritance" },
+  { key: "other", label: "📦 Other asset" },
+];
+const ASSET_HELP = {
+  residential: "Selling the UK home: if it's been the main residence throughout, Private Residence Relief usually means no CGT — keep \"Main residence\" ticked with taxable fraction 0. For a rental or second home, untick it (or set the taxable fraction).",
+  business: "Selling the business or its shares: a UK-resident individual may claim Business Asset Disposal Relief at the BADR rate on gains up to the lifetime limit, with any excess at the main CGT rates. (BADR is 18% for 2026/27 — it was 10% to Apr-25 and 14% to Apr-26; edit it in Assumptions.)",
+  inheritance: "Asset kept until death: it is rebased to market value, so there's no CGT in lifetime. Inheritance tax may apply to the estate instead — tick \"Estimate IHT\" for a rough figure (value above the nil-rate band at 40%).",
+  other: "Any other chargeable asset, with no relief: the gain is taxed at the main CGT rates after the annual exempt amount.",
+};
+
+function disposalBlock(d) {
+  const type = d.type || "residential";
+  const btns = ASSET_TYPES.map((a) =>
+    `<button type="button" class="small ${type === a.key ? "primary" : ""}" data-asset="${a.key}">${a.label}</button>`
+  ).join("");
+  const proceedsLabel = type === "inheritance" ? "Asset value at death" : "Sale proceeds";
+
+  let costFields = `
+    <label class="field"><span class="lbl">Base cost</span><input type="number" data-dbind="cost" value="${d.cost}" /></label>
+    <label class="field"><span class="lbl">Costs of sale</span><input type="number" data-dbind="expenses" value="${d.expenses}" /></label>`;
+  if (type === "inheritance") costFields = ""; // no CGT computation, so cost/expenses are not used
+
+  let extra = "";
+  if (type === "residential") {
+    extra = `
+      <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-dbind="mainResidence" ${d.mainResidence ? "checked" : ""}/> Main residence (PRR)</label></label>
+      <label class="field"><span class="lbl">Taxable fraction <span class="hint">(0–1, if not fully PRR)</span></span><input type="number" step="0.01" data-dbind="taxableFraction" value="${d.taxableFraction}" /></label>`;
+  } else if (type === "inheritance") {
+    extra = `<label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-dbind="estimateIHT" ${d.estimateIHT ? "checked" : ""}/> Estimate IHT (40% above NRB)</label></label>`;
+  }
+
+  return `
+    <div style="font-weight:600;margin:16px 0 8px">Asset sold to repay the loan</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${btns}</div>
+    <p class="muted" style="margin:0 0 10px;font-size:12px">${ASSET_HELP[type]}</p>
+    <div class="grid cols-4">
+      <label class="field"><span class="lbl">${proceedsLabel}</span><input type="number" data-dbind="proceeds" value="${d.proceeds}" /></label>
+      ${costFields}
+      <label class="field"><span class="lbl">In which year</span><input type="number" data-dbind="year" value="${d.year}" /></label>
+      ${extra}
+    </div>`;
 }
 
 /* ---- Render: scenarios --------------------------------------------------- */
@@ -1491,8 +1589,10 @@ function renderScenario(scn, idx) {
   const p = scn.purchase, d = scn.disposal;
   const prop = document.createElement("details");
   prop.style.marginTop = "14px";
+  if (scn._propOpen) prop.open = true;
+  prop.addEventListener("toggle", () => { scn._propOpen = prop.open; });
   prop.innerHTML = `
-    <summary style="cursor:pointer;font-weight:600;font-size:13.5px">Property transaction taxes — SDLT &amp; CGT (one-off)</summary>
+    <summary style="cursor:pointer;font-weight:600;font-size:13.5px">Property &amp; asset taxes — SDLT, CGT / IHT (one-off)</summary>
     <div style="border:1px solid var(--line);border-radius:8px;padding:14px;margin-top:8px">
       <div style="font-weight:600;margin-bottom:8px">Purchase (SDLT)</div>
       <p class="muted" style="margin:0 0 10px;font-size:12px">SDLT applies to property in England &amp; Northern Ireland only. A property in Spain is outside SDLT — leave "Located in England/NI" unticked (Spain levies its own transfer tax / VAT, modelled separately).</p>
@@ -1503,16 +1603,7 @@ function renderScenario(scn, idx) {
         <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pbind="additionalProperty" ${p.additionalProperty ? "checked" : ""}/> Additional dwelling (+surcharge)</label></label>
         <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pbind="nonResident" ${p.nonResident ? "checked" : ""}/> Non-UK-resident (+2%)</label></label>
       </div>
-      <div style="font-weight:600;margin:16px 0 8px">Disposal (CGT)</div>
-      <p class="muted" style="margin:0 0 10px;font-size:12px">Selling the UK home: if it has been the main residence throughout, Private Residence Relief usually means no CGT — keep "Main residence" ticked with taxable fraction 0. For a rental or second home, untick it (or set the taxable fraction).</p>
-      <div class="grid cols-4">
-        <label class="field"><span class="lbl">Sale proceeds</span><input type="number" data-dbind="proceeds" value="${d.proceeds}" /></label>
-        <label class="field"><span class="lbl">Base cost</span><input type="number" data-dbind="cost" value="${d.cost}" /></label>
-        <label class="field"><span class="lbl">Costs of sale</span><input type="number" data-dbind="expenses" value="${d.expenses}" /></label>
-        <label class="field"><span class="lbl">In which year</span><input type="number" data-dbind="year" value="${d.year}" /></label>
-        <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-dbind="mainResidence" ${d.mainResidence ? "checked" : ""}/> Main residence (PRR)</label></label>
-        <label class="field"><span class="lbl">Taxable fraction <span class="hint">(0–1, if not fully PRR)</span></span><input type="number" step="0.01" data-dbind="taxableFraction" value="${d.taxableFraction}" /></label>
-      </div>
+      ${disposalBlock(d)}
     </div>`;
   body.appendChild(prop);
 
@@ -1526,7 +1617,7 @@ function renderScenario(scn, idx) {
       <div class="note">dividend tax + BIK income tax + Class 1A</div></div>
     <div class="card"><div class="k">Transaction taxes</div>
       <div class="v perm">${gbp(result.transactionTaxes)}</div>
-      <div class="note">SDLT ${gbp(result.totals.sdlt)} · CGT ${gbp(result.totals.cgt)}</div></div>
+      <div class="note">SDLT ${gbp(result.totals.sdlt)} · CGT ${gbp(result.totals.cgt)}${result.totals.iht > 0 ? ` · est. IHT ${gbp(result.totals.iht)} (on death)` : ""}</div></div>
     <div class="card"><div class="k">Peak S455 (refundable)</div>
       <div class="v timing">${gbp(result.peakS455)}</div>
       <div class="note">cash locked up with HMRC at peak</div></div>
@@ -1638,6 +1729,15 @@ function renderScenario(scn, idx) {
   };
   bindProp("[data-pbind]", scn.purchase);
   bindProp("[data-dbind]", scn.disposal);
+
+  // Asset-type buttons (house sale / business sale / inheritance / other)
+  root.querySelectorAll("[data-asset]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      scn.disposal.type = e.currentTarget.dataset.asset;
+      scn._propOpen = true; // keep the panel open after switching type
+      commit();
+    });
+  });
 
   return root;
 }
