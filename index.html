@@ -30,6 +30,7 @@
       <button id="btn-example">Load worked example (Spanish property)</button>
       <button id="btn-reset" class="ghost">Reset to defaults</button>
       <button id="btn-email">✉ Draft client email</button>
+      <button id="btn-karbon">🔗 Karbon</button>
       <span class="spacer"></span>
       <button id="btn-print">🖨 Print / Save PDF</button>
     </div>
@@ -210,6 +211,39 @@
         <button id="email-mailto">Open in email app</button>
         <span class="spacer"></span>
         <button class="ghost" id="email-close2">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KARBON MODAL ------------------------------------------------------ -->
+  <div class="modal-overlay" id="karbon-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="karbon-modal-title">
+      <div class="modal-head">
+        <h2 id="karbon-modal-title">Load client from Karbon</h2>
+        <button class="small ghost" id="karbon-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <details id="karbon-settings">
+          <summary style="cursor:pointer;font-weight:600;font-size:13px">Connection settings</summary>
+          <div class="grid cols-2" style="margin:10px 0">
+            <label class="field"><span class="lbl">Proxy URL</span>
+              <input type="text" id="karbon-url" placeholder="https://karbon-proxy.…workers.dev" /></label>
+            <label class="field"><span class="lbl">Passphrase</span>
+              <input type="password" id="karbon-pass" placeholder="shared staff passphrase" /></label>
+          </div>
+          <p class="muted" style="font-size:12px;margin:0">Saved in this browser only. See <code>worker/README.md</code> for setup.</p>
+        </details>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <input type="text" id="karbon-q" placeholder="Search client name…" style="flex:1" />
+          <button class="primary" id="karbon-search">Search</button>
+        </div>
+        <div id="karbon-status" class="muted" style="font-size:12.5px;margin-top:10px;min-height:1em"></div>
+        <div id="karbon-results" style="margin-top:6px"></div>
+      </div>
+      <div class="modal-foot">
+        <span class="muted" style="font-size:12px">Pulls name &amp; contact details to pre-fill the client email.</span>
+        <span class="spacer"></span>
+        <button class="ghost" id="karbon-close2">Close</button>
       </div>
     </div>
   </div>

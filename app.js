@@ -166,11 +166,12 @@ function loadState() {
         if (!parsed.emailMeta) parsed.emailMeta = { client: "", sender: "" };
         if (!parsed.remun) parsed.remun = defaultRemun();
         if (!parsed.homeRent) parsed.homeRent = defaultHomeRent();
+        if (!parsed.karbon) parsed.karbon = { proxyUrl: "", passphrase: "" };
         return parsed;
       }
     }
   } catch (e) { /* ignore */ }
-  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent() };
+  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), karbon: { proxyUrl: "", passphrase: "" } };
 }
 
 function saveState() {
@@ -1003,8 +1004,76 @@ document.getElementById("email-copy").addEventListener("click", async () => {
 document.getElementById("email-mailto").addEventListener("click", () => {
   const subject = document.getElementById("email-subject").value;
   const body = document.getElementById("email-body").value;
-  window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const to = (state.emailMeta && state.emailMeta.clientEmail) ? encodeURIComponent(state.emailMeta.clientEmail) : "";
+  window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 });
+
+/* ---- Karbon client lookup ------------------------------------------------ */
+const karbonModal = () => document.getElementById("karbon-modal");
+function openKarbonModal() {
+  document.getElementById("karbon-url").value = state.karbon.proxyUrl || "";
+  document.getElementById("karbon-pass").value = state.karbon.passphrase || "";
+  document.getElementById("karbon-results").innerHTML = "";
+  document.getElementById("karbon-status").textContent = "";
+  if (!state.karbon.proxyUrl) document.getElementById("karbon-settings").open = true;
+  karbonModal().hidden = false;
+  document.getElementById("karbon-q").focus();
+}
+function closeKarbonModal() { karbonModal().hidden = true; }
+
+function saveKarbonConfig() {
+  state.karbon.proxyUrl = document.getElementById("karbon-url").value.trim();
+  state.karbon.passphrase = document.getElementById("karbon-pass").value;
+  saveState();
+}
+
+async function karbonSearch() {
+  saveKarbonConfig();
+  const status = document.getElementById("karbon-status");
+  const results = document.getElementById("karbon-results");
+  results.innerHTML = "";
+  const q = document.getElementById("karbon-q").value.trim();
+  if (!state.karbon.proxyUrl) { status.textContent = "Set the proxy URL in connection settings first."; return; }
+  if (q.length < 2) { status.textContent = "Type at least two letters of the client name."; return; }
+  status.textContent = "Searching…";
+  try {
+    const url = state.karbon.proxyUrl.replace(/\/+$/, "") + "/search?q=" + encodeURIComponent(q);
+    const res = await fetch(url, { headers: { "X-Passphrase": state.karbon.passphrase || "" } });
+    if (res.status === 401) { status.textContent = "Unauthorised — check the passphrase."; return; }
+    if (!res.ok) { status.textContent = "Proxy error (" + res.status + ")."; return; }
+    const data = await res.json();
+    const list = (data && data.results) || [];
+    if (list.length === 0) { status.textContent = "No matches."; return; }
+    status.textContent = list.length + " result" + (list.length === 1 ? "" : "s") + " — click to use:";
+    results.innerHTML = list.map((p, i) => `
+      <div class="karbon-row" data-ki="${i}">
+        <div><strong>${escapeHtml(p.name)}</strong> <span class="muted" style="font-size:11.5px">${escapeHtml(p.type || "")}</span></div>
+        <div class="muted" style="font-size:12px">${escapeHtml([p.email, p.address].filter(Boolean).join(" · "))}</div>
+      </div>`).join("");
+    results.querySelectorAll(".karbon-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const p = list[parseInt(row.dataset.ki, 10)];
+        state.emailMeta.client = p.name;
+        state.emailMeta.clientEmail = p.email || "";
+        state.emailMeta.clientAddress = p.address || "";
+        saveState();
+        status.textContent = `Loaded "${p.name}" — it'll pre-fill the client email.`;
+        results.querySelectorAll(".karbon-row").forEach((r) => r.classList.remove("sel"));
+        row.classList.add("sel");
+      });
+    });
+  } catch (e) {
+    status.textContent = "Could not reach the proxy. Check the URL and that the Worker is deployed.";
+  }
+}
+
+document.getElementById("btn-karbon").addEventListener("click", openKarbonModal);
+document.getElementById("karbon-close").addEventListener("click", closeKarbonModal);
+document.getElementById("karbon-close2").addEventListener("click", closeKarbonModal);
+karbonModal().addEventListener("click", (e) => { if (e.target === karbonModal()) closeKarbonModal(); });
+document.getElementById("karbon-search").addEventListener("click", karbonSearch);
+document.getElementById("karbon-q").addEventListener("keydown", (e) => { if (e.key === "Enter") karbonSearch(); });
+["karbon-url", "karbon-pass"].forEach((id) => document.getElementById(id).addEventListener("change", saveKarbonConfig));
 
 /* ---- Toolbar ------------------------------------------------------------- */
 document.getElementById("btn-add").addEventListener("click", () => {

@@ -1,0 +1,16 @@
+# Cloudflare Worker config for the Karbon proxy.
+# Deploy with:  cd worker && npx wrangler deploy
+name = "karbon-proxy"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+# The origin allowed to call this proxy (your published planner). CORS is locked to it.
+ALLOWED_ORIGIN = "https://matthewmcconnellpulse.github.io"
+# Karbon API base URL — change only if your tenant uses a different host/version.
+KARBON_BASE_URL = "https://api.karbonhq.com/v3"
+
+# Secrets are NOT stored here. Set them once, encrypted, with:
+#   npx wrangler secret put KARBON_BEARER_TOKEN
+#   npx wrangler secret put KARBON_ACCESS_KEY
+#   npx wrangler secret put APP_PASSPHRASE
