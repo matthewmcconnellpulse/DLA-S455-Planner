@@ -46,6 +46,32 @@
       </div>
     </details>
 
+    <!-- REMUNERATION OPTIMISER -------------------------------------------- -->
+    <details class="panel" id="remun-panel" open>
+      <summary>Remuneration optimiser <span class="sub">— salary · dividends · employer pension, across one or more shareholders</span></summary>
+      <div class="panel-body">
+        <p class="muted" style="margin-top:0;font-size:12.5px">
+          Works out the most tax-efficient way to extract company profit: it layers in
+          employee &amp; employer National Insurance, corporation tax relief on salary/pension,
+          and splits the dividend pool across shareholders to minimise tax. All rates are
+          editable in <em>Assumptions</em>.
+        </p>
+        <div class="grid cols-4" id="remun-company"></div>
+        <div style="margin-top:16px">
+          <div style="font-weight:600;font-size:13.5px;margin-bottom:8px">People (directors / shareholders)</div>
+          <div class="table-scroll"><table class="data" id="remun-people"></table></div>
+          <button class="small" id="remun-add" style="margin-top:8px">+ Add person</button>
+        </div>
+        <div id="remun-results" style="margin-top:18px"></div>
+        <p class="muted" style="font-size:12px;margin-top:14px">
+          Assumptions: NIC is on the simple annual basis; the Employment Allowance is not available
+          to companies whose only employee is a single director. Employer pension contributions are
+          assumed within the annual allowance and valued at the amount paid in — drawdown is taxed
+          later (normally 25% tax-free), which is not modelled here. Planning aid, not advice.
+        </p>
+      </div>
+    </details>
+
     <!-- SCENARIOS --------------------------------------------------------- -->
     <div class="panel">
       <div class="panel-head">
@@ -170,6 +196,7 @@
   </footer>
 
   <script src="engine.js"></script>
+  <script src="remuneration.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
