@@ -31,6 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+        with:
+          # Enables Pages (Source = GitHub Actions) automatically on first run,
+          # so no manual Settings toggle is needed. Still requires the repo to be
+          # public, or a paid plan for private Pages.
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: "."
