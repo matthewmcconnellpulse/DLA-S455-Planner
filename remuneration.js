@@ -264,9 +264,53 @@ function optimiseRemuneration(plan, r) {
   return { best, salary: best.salaryPerEmployee, candidates };
 }
 
+/* ---------------------------------------------------------------------------
+ * Use of home — the director charges the company rent under a licence.
+ *
+ * The rent is deductible for the company (corporation-tax relief) and is taxed
+ * on the director as PROPERTY income — but only on the profit, after an
+ * apportioned share of household running costs. Setting the rent close to those
+ * allowable costs extracts cash at little or no personal tax while the company
+ * still saves corporation tax. (A market rent under a licence; keep the use
+ * non-exclusive to preserve Private Residence Relief — see the UI notes.)
+ *
+ * input = { rent, allowableCosts, otherIncome, companyProfit, associated }
+ *   allowableCosts — business-use share of household running costs (offsets rent)
+ *   otherIncome    — director's other taxable (non-dividend) income, to find the
+ *                    marginal income-tax rate on the rental profit
+ *   companyProfit  — company taxable profit, to find the marginal CT rate
+ * ------------------------------------------------------------------------- */
+function useOfHomeRent(input, r) {
+  const rent = Math.max(0, input.rent || 0);
+  const costs = Math.max(0, input.allowableCosts || 0);
+  const other = Math.max(0, input.otherIncome || 0);
+  const rentalProfit = Math.max(0, rent - costs);
+
+  const base = _computeTax(other, 0, r).total;
+  const withProfit = _computeTax(other + rentalProfit, 0, r).total;
+  const incomeTax = withProfit - base;
+
+  const ctRate = marginalCtRate(input.companyProfit || 0, input.associated || 1, r);
+  const ctRelief = rent * ctRate;
+
+  return {
+    rent,
+    allowableCosts: costs,
+    rentalProfit,
+    incomeTax,
+    marginalIncomeRate: rentalProfit > 0 ? incomeTax / rentalProfit : 0,
+    ctRate,
+    ctRelief,
+    netToDirector: rent - incomeTax,        // cash received, less personal tax on the profit
+    netCostToCompany: rent - ctRelief,      // rent net of corporation-tax relief
+    effectiveRate: rent > 0 ? incomeTax / rent : 0, // personal tax as a % of the rent
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     employeeNIC, employerNIC, corporationTax, marginalCtRate, ctReliefFraction,
     personExtraction, splitDividends, runRemuneration, optimiseRemuneration,
+    useOfHomeRent,
   };
 }

@@ -132,6 +132,11 @@ function defaultRemun() {
   };
 }
 
+/* ---- Use-of-home rent defaults ------------------------------------------- */
+function defaultHomeRent() {
+  return { rent: 6000, allowableCosts: 6000, otherIncome: 50000, companyProfit: 100000, associated: 1 };
+}
+
 /* ---- State --------------------------------------------------------------- */
 let state = loadState();
 
@@ -152,11 +157,12 @@ function loadState() {
         parsed.scenarios.forEach(normaliseScenario);
         if (!parsed.emailMeta) parsed.emailMeta = { client: "", sender: "" };
         if (!parsed.remun) parsed.remun = defaultRemun();
+        if (!parsed.homeRent) parsed.homeRent = defaultHomeRent();
         return parsed;
       }
     }
   } catch (e) { /* ignore */ }
-  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun() };
+  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent() };
 }
 
 function saveState() {
@@ -201,6 +207,7 @@ function renderRates() {
       renderScenarios();
       renderComparison();
       renderRemunResults();
+      renderHomeRentResults();
       document.getElementById("assumptions-year").textContent =
         "· defaults for " + state.rates.taxYearLabel;
     });
@@ -623,6 +630,7 @@ function commit() {
 function renderAll() {
   renderRates();
   renderRemun();
+  renderHomeRent();
   renderScenarios();
   renderComparison();
 }
@@ -777,6 +785,59 @@ function remunRecommendation(result, plan, r) {
   return `<p class="muted" style="font-size:12.5px;margin-top:12px"><strong>Recommendation:</strong> pay a salary of about ${gbp(s)} per employee — ${why}. The remaining profit is distributed as dividends, split to minimise total tax. Effective extraction rate: <strong>${pct(result.totals.effectiveRate)}</strong>.</p>`;
 }
 
+/* ---- Use of home — rent to company --------------------------------------- */
+function renderHomeRent() {
+  renderHomeRentInputs();
+  renderHomeRentResults();
+}
+
+function renderHomeRentInputs() {
+  const h = state.homeRent;
+  const host = document.getElementById("homerent-inputs");
+  host.innerHTML = `
+    <label class="field"><span class="lbl">Annual rent charged</span>
+      <input type="number" data-hr="rent" value="${h.rent}" /></label>
+    <label class="field"><span class="lbl">Allowable costs <span class="hint">(business-use share)</span></span>
+      <input type="number" data-hr="allowableCosts" value="${h.allowableCosts}" /></label>
+    <label class="field"><span class="lbl">Director's other income <span class="hint">(sets marginal rate)</span></span>
+      <input type="number" data-hr="otherIncome" value="${h.otherIncome}" /></label>
+    <label class="field"><span class="lbl">Company taxable profit <span class="hint">(sets CT rate)</span></span>
+      <input type="number" data-hr="companyProfit" value="${h.companyProfit}" /></label>
+    <label class="field"><span class="lbl">Associated companies</span>
+      <input type="number" data-hr="associated" value="${h.associated}" /></label>`;
+  host.querySelectorAll("[data-hr]").forEach((inp) => {
+    inp.addEventListener("input", (e) => {
+      state.homeRent[e.target.dataset.hr] = parseFloat(e.target.value) || 0;
+      saveState();
+      renderHomeRentResults();
+    });
+  });
+}
+
+function renderHomeRentResults() {
+  const res = useOfHomeRent(state.homeRent, state.rates);
+  const host = document.getElementById("homerent-results");
+  const cards = `<div class="summary-cards">
+    ${remunCard("Rental profit (taxable)", gbp(res.rentalProfit), "rent less allowable costs")}
+    ${remunCard("Director's income tax", gbp(res.incomeTax), res.rentalProfit > 0 ? `at ${pct(res.marginalIncomeRate)} marginal` : "no taxable profit")}
+    ${remunCard("Net cash to director", gbp(res.netToDirector), "rent received less the tax", "timing")}
+    ${remunCard("Company CT relief", gbp(res.ctRelief), `rent deductible at ${pct(res.ctRate)}`, "")}
+  </div>`;
+  const tbl = `<div class="table-scroll" style="margin-top:12px"><table class="data"><tbody>
+      <tr><td>Rent charged to the company</td><td>${gbp(res.rent)}</td></tr>
+      <tr><td>Less allowable household costs (business share)</td><td>−${gbp(res.allowableCosts)}</td></tr>
+      <tr><td>Taxable rental profit</td><td>${gbp(res.rentalProfit)}</td></tr>
+      <tr><td>Director's income tax on the profit</td><td>−${gbp(res.incomeTax)}</td></tr>
+      <tr><td>Company corporation-tax relief on the rent</td><td>${gbp(res.ctRelief)}</td></tr>
+      <tr><td><strong>Net cost to the company</strong> (rent less CT relief)</td><td><strong>${gbp(res.netCostToCompany)}</strong></td></tr>
+      <tr><td><strong>Personal tax as a % of the rent extracted</strong></td><td><strong>${pct(res.effectiveRate)}</strong></td></tr>
+  </tbody></table></div>`;
+  const insight = res.rentalProfit === 0
+    ? `<p class="muted" style="font-size:12.5px;margin-top:12px"><strong>£${Math.round(res.rent).toLocaleString("en-GB")} extracted at 0% personal tax</strong> — the rent is matched to allowable costs, so there's no taxable profit, while the company still saves ${gbp(res.ctRelief)} in corporation tax.</p>`
+    : `<p class="muted" style="font-size:12.5px;margin-top:12px">The rent exceeds the allowable costs, so the ${gbp(res.rentalProfit)} profit is taxed on the director at ${pct(res.marginalIncomeRate)}. Bringing the rent down towards the allowable costs reduces the personal tax while keeping the company's CT relief.</p>`;
+  host.innerHTML = cards + tbl + insight;
+}
+
 /* ---- Client email -------------------------------------------------------- */
 /* Builds a plain-English email summarising the modelled scenarios, spelling out
  * the key caveat — that clearing a director's loan with a future dividend is
@@ -899,7 +960,7 @@ document.getElementById("btn-example").addEventListener("click", () => {
 });
 document.getElementById("btn-reset").addEventListener("click", () => {
   if (!confirm("Reset all assumptions and scenarios to defaults?")) return;
-  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun() };
+  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent() };
   saveState();
   renderAll();
 });
