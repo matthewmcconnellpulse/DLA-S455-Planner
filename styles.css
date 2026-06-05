@@ -248,6 +248,13 @@ textarea#email-body {
 }
 textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--brand); }
 
+.karbon-row {
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 6px; cursor: pointer;
+}
+.karbon-row:hover { background: var(--soft); }
+.karbon-row.sel { border-color: var(--brand); background: #e7f2fb; }
+
 .muted { color: var(--muted); }
 .right { text-align: right; }
 .nowrap { white-space: nowrap; }

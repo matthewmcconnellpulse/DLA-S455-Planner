@@ -255,6 +255,13 @@ textarea#email-body {
 }
 textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--brand); }
 
+.karbon-row {
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 6px; cursor: pointer;
+}
+.karbon-row:hover { background: var(--soft); }
+.karbon-row.sel { border-color: var(--brand); background: #e7f2fb; }
+
 .muted { color: var(--muted); }
 .right { text-align: right; }
 .nowrap { white-space: nowrap; }
@@ -303,6 +310,7 @@ textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--bran
       <button id="btn-example">Load worked example (Spanish property)</button>
       <button id="btn-reset" class="ghost">Reset to defaults</button>
       <button id="btn-email">✉ Draft client email</button>
+      <button id="btn-karbon">🔗 Karbon</button>
       <span class="spacer"></span>
       <button id="btn-print">🖨 Print / Save PDF</button>
     </div>
@@ -483,6 +491,39 @@ textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--bran
         <button id="email-mailto">Open in email app</button>
         <span class="spacer"></span>
         <button class="ghost" id="email-close2">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KARBON MODAL ------------------------------------------------------ -->
+  <div class="modal-overlay" id="karbon-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="karbon-modal-title">
+      <div class="modal-head">
+        <h2 id="karbon-modal-title">Load client from Karbon</h2>
+        <button class="small ghost" id="karbon-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <details id="karbon-settings">
+          <summary style="cursor:pointer;font-weight:600;font-size:13px">Connection settings</summary>
+          <div class="grid cols-2" style="margin:10px 0">
+            <label class="field"><span class="lbl">Proxy URL</span>
+              <input type="text" id="karbon-url" placeholder="https://karbon-proxy.…workers.dev" /></label>
+            <label class="field"><span class="lbl">Passphrase</span>
+              <input type="password" id="karbon-pass" placeholder="shared staff passphrase" /></label>
+          </div>
+          <p class="muted" style="font-size:12px;margin:0">Saved in this browser only. See <code>worker/README.md</code> for setup.</p>
+        </details>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <input type="text" id="karbon-q" placeholder="Search client name…" style="flex:1" />
+          <button class="primary" id="karbon-search">Search</button>
+        </div>
+        <div id="karbon-status" class="muted" style="font-size:12.5px;margin-top:10px;min-height:1em"></div>
+        <div id="karbon-results" style="margin-top:6px"></div>
+      </div>
+      <div class="modal-foot">
+        <span class="muted" style="font-size:12px">Pulls name &amp; contact details to pre-fill the client email.</span>
+        <span class="spacer"></span>
+        <button class="ghost" id="karbon-close2">Close</button>
       </div>
     </div>
   </div>
@@ -1412,11 +1453,12 @@ function loadState() {
         if (!parsed.emailMeta) parsed.emailMeta = { client: "", sender: "" };
         if (!parsed.remun) parsed.remun = defaultRemun();
         if (!parsed.homeRent) parsed.homeRent = defaultHomeRent();
+        if (!parsed.karbon) parsed.karbon = { proxyUrl: "", passphrase: "" };
         return parsed;
       }
     }
   } catch (e) { /* ignore */ }
-  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent() };
+  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), karbon: { proxyUrl: "", passphrase: "" } };
 }
 
 function saveState() {
@@ -2249,8 +2291,76 @@ document.getElementById("email-copy").addEventListener("click", async () => {
 document.getElementById("email-mailto").addEventListener("click", () => {
   const subject = document.getElementById("email-subject").value;
   const body = document.getElementById("email-body").value;
-  window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const to = (state.emailMeta && state.emailMeta.clientEmail) ? encodeURIComponent(state.emailMeta.clientEmail) : "";
+  window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 });
+
+/* ---- Karbon client lookup ------------------------------------------------ */
+const karbonModal = () => document.getElementById("karbon-modal");
+function openKarbonModal() {
+  document.getElementById("karbon-url").value = state.karbon.proxyUrl || "";
+  document.getElementById("karbon-pass").value = state.karbon.passphrase || "";
+  document.getElementById("karbon-results").innerHTML = "";
+  document.getElementById("karbon-status").textContent = "";
+  if (!state.karbon.proxyUrl) document.getElementById("karbon-settings").open = true;
+  karbonModal().hidden = false;
+  document.getElementById("karbon-q").focus();
+}
+function closeKarbonModal() { karbonModal().hidden = true; }
+
+function saveKarbonConfig() {
+  state.karbon.proxyUrl = document.getElementById("karbon-url").value.trim();
+  state.karbon.passphrase = document.getElementById("karbon-pass").value;
+  saveState();
+}
+
+async function karbonSearch() {
+  saveKarbonConfig();
+  const status = document.getElementById("karbon-status");
+  const results = document.getElementById("karbon-results");
+  results.innerHTML = "";
+  const q = document.getElementById("karbon-q").value.trim();
+  if (!state.karbon.proxyUrl) { status.textContent = "Set the proxy URL in connection settings first."; return; }
+  if (q.length < 2) { status.textContent = "Type at least two letters of the client name."; return; }
+  status.textContent = "Searching…";
+  try {
+    const url = state.karbon.proxyUrl.replace(/\/+$/, "") + "/search?q=" + encodeURIComponent(q);
+    const res = await fetch(url, { headers: { "X-Passphrase": state.karbon.passphrase || "" } });
+    if (res.status === 401) { status.textContent = "Unauthorised — check the passphrase."; return; }
+    if (!res.ok) { status.textContent = "Proxy error (" + res.status + ")."; return; }
+    const data = await res.json();
+    const list = (data && data.results) || [];
+    if (list.length === 0) { status.textContent = "No matches."; return; }
+    status.textContent = list.length + " result" + (list.length === 1 ? "" : "s") + " — click to use:";
+    results.innerHTML = list.map((p, i) => `
+      <div class="karbon-row" data-ki="${i}">
+        <div><strong>${escapeHtml(p.name)}</strong> <span class="muted" style="font-size:11.5px">${escapeHtml(p.type || "")}</span></div>
+        <div class="muted" style="font-size:12px">${escapeHtml([p.email, p.address].filter(Boolean).join(" · "))}</div>
+      </div>`).join("");
+    results.querySelectorAll(".karbon-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const p = list[parseInt(row.dataset.ki, 10)];
+        state.emailMeta.client = p.name;
+        state.emailMeta.clientEmail = p.email || "";
+        state.emailMeta.clientAddress = p.address || "";
+        saveState();
+        status.textContent = `Loaded "${p.name}" — it'll pre-fill the client email.`;
+        results.querySelectorAll(".karbon-row").forEach((r) => r.classList.remove("sel"));
+        row.classList.add("sel");
+      });
+    });
+  } catch (e) {
+    status.textContent = "Could not reach the proxy. Check the URL and that the Worker is deployed.";
+  }
+}
+
+document.getElementById("btn-karbon").addEventListener("click", openKarbonModal);
+document.getElementById("karbon-close").addEventListener("click", closeKarbonModal);
+document.getElementById("karbon-close2").addEventListener("click", closeKarbonModal);
+karbonModal().addEventListener("click", (e) => { if (e.target === karbonModal()) closeKarbonModal(); });
+document.getElementById("karbon-search").addEventListener("click", karbonSearch);
+document.getElementById("karbon-q").addEventListener("keydown", (e) => { if (e.key === "Enter") karbonSearch(); });
+["karbon-url", "karbon-pass"].forEach((id) => document.getElementById(id).addEventListener("change", saveKarbonConfig));
 
 /* ---- Toolbar ------------------------------------------------------------- */
 document.getElementById("btn-add").addEventListener("click", () => {
