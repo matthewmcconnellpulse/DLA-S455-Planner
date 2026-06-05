@@ -7,7 +7,7 @@ const { defaultRates } = require("../engine.js");
 const {
   employeeNIC, employerNIC, corporationTax, marginalCtRate, ctReliefFraction,
   personExtraction, splitDividends, runRemuneration, optimiseRemuneration,
-  useOfHomeRent, childEmployment, relevantLifePlan,
+  useOfHomeRent, childEmployment, relevantLifePlan, evCompanyCar, pensionAllowance,
 } = require("../remuneration.js");
 
 let passed = 0;
@@ -144,5 +144,30 @@ const rlp = relevantLifePlan({ premium: 1200, directorOtherIncome: 120000, compa
 approx(rlp.profitRLP, 1200, 0.5, "RLP consumes its face value of pre-tax profit (deductible)");
 ok(rlp.profitPersonal > rlp.profitRLP, "funding cover personally needs more pre-tax profit than an RLP");
 ok(rlp.saving > 0 && rlp.savingPct > 0 && rlp.savingPct < 1, "RLP shows a positive, sane saving");
+
+/* ---- EV company car ----------------------------------------------------- */
+const ev = evCompanyCar({ listPrice: 50000, bikPercent: 0.04, directorOtherIncome: 60000, companyProfit: 100000, associated: 1, carCost: 50000, purchased: true, petrolBikPercent: 0.37 }, r);
+approx(ev.benefit, 50000 * 0.04, 0.5, "EV taxable benefit = list price × appropriate %");
+approx(ev.employeeTax, ev.benefit * ev.marginalRate, 1, "employee tax = benefit × marginal rate");
+approx(ev.fyaRelief, 50000 * ev.ctRate, 1, "100% FYA gives CT relief on the full car cost");
+ok(ev.savingVsPetrol > 0, "EV is cheaper than an equivalent petrol car at a high BIK %");
+
+/* ---- Pension allowance -------------------------------------------------- */
+// No taper when threshold income is below the gate.
+const pNoTaper = pensionAllowance({ adjustedIncome: 150000, thresholdIncome: 150000, contribution: 40000, carryForward: 0, companyProfit: 100000, associated: 1 }, r);
+approx(pNoTaper.tapered, r.pensionAnnualAllowance, 0.5, "no taper below the threshold-income gate");
+// Taper: adjusted £320k, threshold over £200k -> AA reduced by (320k-260k)/2 = 30k -> 30k.
+const pTaper = pensionAllowance({ adjustedIncome: 320000, thresholdIncome: 250000, contribution: 0, carryForward: 0, companyProfit: 100000, associated: 1 }, r);
+approx(pTaper.tapered, 30000, 0.5, "tapered AA reduced by £1 per £2 of adjusted income over £260k");
+// Floor at the minimum allowance for very high earners.
+const pFloor = pensionAllowance({ adjustedIncome: 400000, thresholdIncome: 400000, contribution: 0, carryForward: 0, companyProfit: 100000, associated: 1 }, r);
+approx(pFloor.tapered, r.pensionMinAllowance, 0.5, "tapered AA floors at the minimum allowance");
+// Carry-forward adds to the available allowance; excess triggers an AA charge.
+const pCarry = pensionAllowance({ adjustedIncome: 150000, thresholdIncome: 150000, contribution: 90000, carryForward: 40000, companyProfit: 100000, associated: 1 }, r);
+approx(pCarry.available, r.pensionAnnualAllowance + 40000, 0.5, "carry-forward adds to the available allowance");
+approx(pCarry.excess, 0, 0.5, "contribution within allowance + carry-forward: no excess");
+const pExcess = pensionAllowance({ adjustedIncome: 150000, thresholdIncome: 150000, contribution: 80000, carryForward: 0, companyProfit: 100000, associated: 1 }, r);
+approx(pExcess.excess, 20000, 0.5, "contribution above the allowance is an excess");
+ok(pExcess.aaCharge > 0, "an excess contribution triggers an annual allowance charge");
 
 console.log(`\n✓ All ${passed} remuneration assertions passed.`);
