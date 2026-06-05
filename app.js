@@ -33,6 +33,12 @@ const RATE_FIELDS = [
   { key: "cgtResidentialHigher", label: "CGT residential — higher", type: "pct", group: "CGT / SDLT" },
   { key: "sdltSurcharge", label: "SDLT additional-dwelling surcharge", type: "pct", group: "CGT / SDLT" },
   { key: "sdltNonResident", label: "SDLT non-resident surcharge", type: "pct", group: "CGT / SDLT" },
+  { key: "cgtNonResBasic", label: "CGT non-residential — basic", type: "pct", group: "CGT / SDLT" },
+  { key: "cgtNonResHigher", label: "CGT non-residential — higher", type: "pct", group: "CGT / SDLT" },
+  { key: "badrRate", label: "BADR rate", type: "pct", group: "CGT / SDLT", hint: "business asset disposal relief" },
+  { key: "badrLifetimeLimit", label: "BADR lifetime limit", type: "money", group: "CGT / SDLT" },
+  { key: "ihtRate", label: "Inheritance tax rate", type: "pct", group: "CGT / SDLT" },
+  { key: "ihtNilRateBand", label: "IHT nil-rate band", type: "money", group: "CGT / SDLT" },
   { key: "niPrimaryThreshold", label: "NIC primary threshold", type: "money", group: "NIC", hint: "employee" },
   { key: "niUpperEarnings", label: "Upper earnings limit", type: "money", group: "NIC" },
   { key: "niEmployeeMain", label: "Employee NIC — main", type: "pct", group: "NIC" },
@@ -143,6 +149,8 @@ let state = loadState();
 function normaliseScenario(scn) {
   if (!scn.purchase) scn.purchase = { year: 1, price: 0, applies: false, additionalProperty: true, nonResident: false };
   if (!scn.disposal) scn.disposal = { year: scn.years ? scn.years.length : 4, proceeds: 0, cost: 0, expenses: 0, mainResidence: true, taxableFraction: 0 };
+  if (!scn.disposal.type) scn.disposal.type = "residential";
+  if (scn.disposal.estimateIHT == null) scn.disposal.estimateIHT = false;
   return scn;
 }
 
@@ -212,6 +220,53 @@ function renderRates() {
         "· defaults for " + state.rates.taxYearLabel;
     });
   });
+}
+
+/* ---- Render: the "asset sold to repay the loan" block (CGT / IHT) -------- */
+const ASSET_TYPES = [
+  { key: "residential", label: "🏠 House sale" },
+  { key: "business", label: "🏢 Business sale (BADR)" },
+  { key: "inheritance", label: "🪦 Inheritance" },
+  { key: "other", label: "📦 Other asset" },
+];
+const ASSET_HELP = {
+  residential: "Selling the UK home: if it's been the main residence throughout, Private Residence Relief usually means no CGT — keep \"Main residence\" ticked with taxable fraction 0. For a rental or second home, untick it (or set the taxable fraction).",
+  business: "Selling the business or its shares: a UK-resident individual may claim Business Asset Disposal Relief at the BADR rate on gains up to the lifetime limit, with any excess at the main CGT rates. (BADR is 18% for 2026/27 — it was 10% to Apr-25 and 14% to Apr-26; edit it in Assumptions.)",
+  inheritance: "Asset kept until death: it is rebased to market value, so there's no CGT in lifetime. Inheritance tax may apply to the estate instead — tick \"Estimate IHT\" for a rough figure (value above the nil-rate band at 40%).",
+  other: "Any other chargeable asset, with no relief: the gain is taxed at the main CGT rates after the annual exempt amount.",
+};
+
+function disposalBlock(d) {
+  const type = d.type || "residential";
+  const btns = ASSET_TYPES.map((a) =>
+    `<button type="button" class="small ${type === a.key ? "primary" : ""}" data-asset="${a.key}">${a.label}</button>`
+  ).join("");
+  const proceedsLabel = type === "inheritance" ? "Asset value at death" : "Sale proceeds";
+
+  let costFields = `
+    <label class="field"><span class="lbl">Base cost</span><input type="number" data-dbind="cost" value="${d.cost}" /></label>
+    <label class="field"><span class="lbl">Costs of sale</span><input type="number" data-dbind="expenses" value="${d.expenses}" /></label>`;
+  if (type === "inheritance") costFields = ""; // no CGT computation, so cost/expenses are not used
+
+  let extra = "";
+  if (type === "residential") {
+    extra = `
+      <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-dbind="mainResidence" ${d.mainResidence ? "checked" : ""}/> Main residence (PRR)</label></label>
+      <label class="field"><span class="lbl">Taxable fraction <span class="hint">(0–1, if not fully PRR)</span></span><input type="number" step="0.01" data-dbind="taxableFraction" value="${d.taxableFraction}" /></label>`;
+  } else if (type === "inheritance") {
+    extra = `<label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-dbind="estimateIHT" ${d.estimateIHT ? "checked" : ""}/> Estimate IHT (40% above NRB)</label></label>`;
+  }
+
+  return `
+    <div style="font-weight:600;margin:16px 0 8px">Asset sold to repay the loan</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${btns}</div>
+    <p class="muted" style="margin:0 0 10px;font-size:12px">${ASSET_HELP[type]}</p>
+    <div class="grid cols-4">
+      <label class="field"><span class="lbl">${proceedsLabel}</span><input type="number" data-dbind="proceeds" value="${d.proceeds}" /></label>
+      ${costFields}
+      <label class="field"><span class="lbl">In which year</span><input type="number" data-dbind="year" value="${d.year}" /></label>
+      ${extra}
+    </div>`;
 }
 
 /* ---- Render: scenarios --------------------------------------------------- */
@@ -288,8 +343,10 @@ function renderScenario(scn, idx) {
   const p = scn.purchase, d = scn.disposal;
   const prop = document.createElement("details");
   prop.style.marginTop = "14px";
+  if (scn._propOpen) prop.open = true;
+  prop.addEventListener("toggle", () => { scn._propOpen = prop.open; });
   prop.innerHTML = `
-    <summary style="cursor:pointer;font-weight:600;font-size:13.5px">Property transaction taxes — SDLT &amp; CGT (one-off)</summary>
+    <summary style="cursor:pointer;font-weight:600;font-size:13.5px">Property &amp; asset taxes — SDLT, CGT / IHT (one-off)</summary>
     <div style="border:1px solid var(--line);border-radius:8px;padding:14px;margin-top:8px">
       <div style="font-weight:600;margin-bottom:8px">Purchase (SDLT)</div>
       <p class="muted" style="margin:0 0 10px;font-size:12px">SDLT applies to property in England &amp; Northern Ireland only. A property in Spain is outside SDLT — leave "Located in England/NI" unticked (Spain levies its own transfer tax / VAT, modelled separately).</p>
@@ -300,16 +357,7 @@ function renderScenario(scn, idx) {
         <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pbind="additionalProperty" ${p.additionalProperty ? "checked" : ""}/> Additional dwelling (+surcharge)</label></label>
         <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pbind="nonResident" ${p.nonResident ? "checked" : ""}/> Non-UK-resident (+2%)</label></label>
       </div>
-      <div style="font-weight:600;margin:16px 0 8px">Disposal (CGT)</div>
-      <p class="muted" style="margin:0 0 10px;font-size:12px">Selling the UK home: if it has been the main residence throughout, Private Residence Relief usually means no CGT — keep "Main residence" ticked with taxable fraction 0. For a rental or second home, untick it (or set the taxable fraction).</p>
-      <div class="grid cols-4">
-        <label class="field"><span class="lbl">Sale proceeds</span><input type="number" data-dbind="proceeds" value="${d.proceeds}" /></label>
-        <label class="field"><span class="lbl">Base cost</span><input type="number" data-dbind="cost" value="${d.cost}" /></label>
-        <label class="field"><span class="lbl">Costs of sale</span><input type="number" data-dbind="expenses" value="${d.expenses}" /></label>
-        <label class="field"><span class="lbl">In which year</span><input type="number" data-dbind="year" value="${d.year}" /></label>
-        <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-dbind="mainResidence" ${d.mainResidence ? "checked" : ""}/> Main residence (PRR)</label></label>
-        <label class="field"><span class="lbl">Taxable fraction <span class="hint">(0–1, if not fully PRR)</span></span><input type="number" step="0.01" data-dbind="taxableFraction" value="${d.taxableFraction}" /></label>
-      </div>
+      ${disposalBlock(d)}
     </div>`;
   body.appendChild(prop);
 
@@ -323,7 +371,7 @@ function renderScenario(scn, idx) {
       <div class="note">dividend tax + BIK income tax + Class 1A</div></div>
     <div class="card"><div class="k">Transaction taxes</div>
       <div class="v perm">${gbp(result.transactionTaxes)}</div>
-      <div class="note">SDLT ${gbp(result.totals.sdlt)} · CGT ${gbp(result.totals.cgt)}</div></div>
+      <div class="note">SDLT ${gbp(result.totals.sdlt)} · CGT ${gbp(result.totals.cgt)}${result.totals.iht > 0 ? ` · est. IHT ${gbp(result.totals.iht)} (on death)` : ""}</div></div>
     <div class="card"><div class="k">Peak S455 (refundable)</div>
       <div class="v timing">${gbp(result.peakS455)}</div>
       <div class="note">cash locked up with HMRC at peak</div></div>
@@ -435,6 +483,15 @@ function renderScenario(scn, idx) {
   };
   bindProp("[data-pbind]", scn.purchase);
   bindProp("[data-dbind]", scn.disposal);
+
+  // Asset-type buttons (house sale / business sale / inheritance / other)
+  root.querySelectorAll("[data-asset]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      scn.disposal.type = e.currentTarget.dataset.asset;
+      scn._propOpen = true; // keep the panel open after switching type
+      commit();
+    });
+  });
 
   return root;
 }
