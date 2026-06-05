@@ -248,6 +248,27 @@ textarea#email-body {
 }
 textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--brand); }
 
+.explainer {
+  margin-top: 14px;
+  border: 1px solid #cfe3d8;
+  background: #f0f8f4;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.explainer ul { font-size: 12.5px; }
+.compliance {
+  margin-top: 12px;
+  border: 1px solid #f0d79a;
+  background: #fff6e6;
+  color: #5b4410;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 12.5px;
+}
+.compliance h4 { margin: 0 0 6px; font-size: 13px; }
+.compliance ul { margin: 0; padding-left: 18px; }
+
 .karbon-row {
   border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 12px; margin-bottom: 6px; cursor: pointer;

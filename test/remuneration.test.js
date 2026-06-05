@@ -7,7 +7,7 @@ const { defaultRates } = require("../engine.js");
 const {
   employeeNIC, employerNIC, corporationTax, marginalCtRate, ctReliefFraction,
   personExtraction, splitDividends, runRemuneration, optimiseRemuneration,
-  useOfHomeRent,
+  useOfHomeRent, childEmployment, relevantLifePlan,
 } = require("../remuneration.js");
 
 let passed = 0;
@@ -125,5 +125,24 @@ const rentProfit = useOfHomeRent({ rent: 10000, allowableCosts: 4000, otherIncom
 approx(rentProfit.rentalProfit, 6000, 0.01, "rental profit = rent - allowable costs");
 approx(rentProfit.incomeTax, 6000 * r.incomeHigher, 1, "rental profit taxed at the higher rate for a higher-rate director");
 ok(rentProfit.netToDirector > 0 && rentProfit.netToDirector < rentProfit.rent, "net to director is rent less personal tax");
+
+/* ---- Employing children ------------------------------------------------- */
+// Two children paid the personal allowance each: no income tax, full CT relief.
+const kids = childEmployment({ children: 2, wagePerChild: r.personalAllowance, childOtherIncome: 0, companyProfit: 100000, associated: 1 }, r);
+approx(kids.totalWages, 2 * r.personalAllowance, 0.5, "total child wages");
+approx(kids.totalIncomeTax, 0, 0.5, "no income tax on wages up to the personal allowance");
+approx(kids.effectiveRate, 0, 1e-6, "child wages at the PA extract at 0% personal tax");
+approx(kids.ctRelief, 2 * r.personalAllowance * 0.265, 1, "company gets CT relief on the wages at the marginal rate");
+// A wage above the PA is taxed on the child at the basic rate.
+const kidHi = childEmployment({ children: 1, wagePerChild: 20000, childOtherIncome: 0, companyProfit: 100000, associated: 1 }, r);
+approx(kidHi.totalIncomeTax, (20000 - r.personalAllowance) * r.incomeBasic, 1, "child wage above PA taxed at basic rate");
+
+/* ---- Relevant life plan ------------------------------------------------- */
+// For a higher/additional-rate director, funding cover via the company beats
+// funding it personally: less pre-tax profit is required.
+const rlp = relevantLifePlan({ premium: 1200, directorOtherIncome: 120000, companyProfit: 100000, associated: 1 }, r);
+approx(rlp.profitRLP, 1200, 0.5, "RLP consumes its face value of pre-tax profit (deductible)");
+ok(rlp.profitPersonal > rlp.profitRLP, "funding cover personally needs more pre-tax profit than an RLP");
+ok(rlp.saving > 0 && rlp.savingPct > 0 && rlp.savingPct < 1, "RLP shows a positive, sane saving");
 
 console.log(`\n✓ All ${passed} remuneration assertions passed.`);
