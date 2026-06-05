@@ -90,6 +90,61 @@ to external services (databases, third-party APIs, etc.), document the
 services, where their configuration lives, and how credentials are supplied
 (env vars, secrets manager) — **never commit secrets to the repository.**
 
+## Working preferences
+
+> These are the repository owner's defaults for how AI assistants should work
+> here. They persist across sessions because they live in git (important in the
+> web/remote environment, where the container itself is ephemeral). **Edit
+> freely** — treat anything here as a starting point, not gospel.
+
+### Communication style
+
+- Be **concise and direct**; lead with the answer, then supporting detail.
+- Explain the **why** behind non-obvious decisions, but don't over-narrate
+  routine steps.
+- **Ask before proceeding** on anything ambiguous, irreversible, or
+  architecturally significant. For low-risk, reversible choices, pick a sensible
+  default, state it, and continue.
+- Surface trade-offs and disagree when warranted — don't just agree.
+- Report outcomes honestly: if something failed, was skipped, or is unverified,
+  say so plainly.
+
+### Git & commit style
+
+- **Never commit directly to `main`** — always work on a feature branch.
+- Commit messages: short imperative subject line, then a body explaining the
+  *why* when the change isn't self-explanatory.
+- Make **focused commits** — one logical change each; avoid mixing unrelated
+  work.
+- Push with upstream tracking: `git push -u origin <branch-name>`.
+- **Do not open a pull request unless explicitly asked.**
+- Don't commit or push unless asked; when asked, never push to a branch other
+  than the agreed one without permission.
+
+### Coding preferences
+
+- **Match the surrounding code** — its style, naming, idioms, and comment
+  density — over importing outside conventions.
+- Prefer **clarity over cleverness**; write code that reads like the rest of the
+  codebase.
+- **Reuse existing utilities and patterns** before adding new dependencies;
+  flag and justify any new dependency.
+- Keep changes **minimal and scoped** to the task — no opportunistic refactors
+  unless asked.
+- _Language/framework/formatting specifics: to be filled in once the stack is
+  chosen (see Coding conventions above)._
+
+### Workflow defaults
+
+- **Read before you write** — verify the current state of files rather than
+  assuming.
+- **Run the relevant tests/linters before considering a change done**, once such
+  tooling exists; prefer the project's own scripts over ad-hoc commands.
+- Don't claim something works until it's been **verified** (tests run, app
+  exercised, output observed).
+- When you introduce new tooling, structure, or conventions, **update this
+  CLAUDE.md in the same change** so it stays accurate.
+
 ## Notes for AI assistants
 
 - This is a near-empty repo: **read before you write.** Confirm what actually
