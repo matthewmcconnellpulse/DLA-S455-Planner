@@ -1034,9 +1034,9 @@ function jumpTo(id) {
 function renderToolkit() { renderMenu(); renderChecklist(); }
 
 function renderMenu() {
-  document.getElementById("menu-chips").innerHTML =
+  document.getElementById("topnav").innerHTML =
     MENU.map((m) => `<a class="menu-chip" data-jump="${m.id}">${m.label}</a>`).join("");
-  document.querySelectorAll("#menu-chips [data-jump]").forEach((a) =>
+  document.querySelectorAll("#topnav [data-jump]").forEach((a) =>
     a.addEventListener("click", () => jumpTo(a.dataset.jump)));
 }
 
