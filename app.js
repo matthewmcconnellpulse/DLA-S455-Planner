@@ -1,0 +1,526 @@
+/* global defaultRates, runScenario */
+/*
+ * UI layer for the Dividend / S455 planner.
+ * State is kept in a single `state` object, persisted to localStorage, and the
+ * whole view re-renders on change. No frameworks — just the DOM.
+ */
+
+const STORAGE_KEY = "dla-s455-planner-v1";
+
+/* ---- Rate metadata: drives the editable Assumptions panel ---------------- */
+const RATE_FIELDS = [
+  { key: "taxYearLabel", label: "Tax year", type: "text", group: "General" },
+  { key: "personalAllowance", label: "Personal allowance", type: "money", group: "Income tax" },
+  { key: "paTaperThreshold", label: "PA taper threshold", type: "money", group: "Income tax", hint: "lose £1 per £2 above" },
+  { key: "basicBandWidth", label: "Basic rate band width", type: "money", group: "Income tax" },
+  { key: "additionalThreshold", label: "Additional rate threshold", type: "money", group: "Income tax" },
+  { key: "incomeBasic", label: "Income tax — basic", type: "pct", group: "Income tax" },
+  { key: "incomeHigher", label: "Income tax — higher", type: "pct", group: "Income tax" },
+  { key: "incomeAdditional", label: "Income tax — additional", type: "pct", group: "Income tax" },
+  { key: "dividendAllowance", label: "Dividend allowance", type: "money", group: "Dividends" },
+  { key: "divOrdinary", label: "Dividend — ordinary", type: "pct", group: "Dividends" },
+  { key: "divUpper", label: "Dividend — upper", type: "pct", group: "Dividends" },
+  { key: "divAdditional", label: "Dividend — additional", type: "pct", group: "Dividends" },
+  { key: "s455Rate", label: "S455 rate", type: "pct", group: "Loan / S455 / BIK" },
+  { key: "officialRate", label: "Official rate of interest", type: "pct", group: "Loan / S455 / BIK", hint: "BIK — reviewed quarterly" },
+  { key: "bikThreshold", label: "BIK exemption threshold", type: "money", group: "Loan / S455 / BIK" },
+  { key: "class1ARate", label: "Class 1A NIC rate", type: "pct", group: "Loan / S455 / BIK" },
+];
+
+/* ---- Worked example: the Spanish-property client ------------------------- */
+function exampleScenarios() {
+  const blankYear = () => ({ drawdown: 0, dividends: 0, externalRepayment: 0 });
+  return [
+    {
+      name: "A · Loan, repay from UK home sale (no extra dividends)",
+      note: "Borrow £1m, pay S455 + BIK, repay in full from the house sale in year 4. S455 is refunded.",
+      otherIncome: 150000,
+      openingLoan: 0,
+      years: [
+        { drawdown: 1000000, dividends: 0, externalRepayment: 0 },
+        blankYear(),
+        blankYear(),
+        { drawdown: 0, dividends: 0, externalRepayment: 1000000 },
+      ],
+    },
+    {
+      name: "B · Loan, clear with £250k dividends/yr",
+      note: "Borrow £1m, declare £250k dividends each year to bring down the S455 balance.",
+      otherIncome: 150000,
+      openingLoan: 0,
+      years: [
+        { drawdown: 1000000, dividends: 250000, externalRepayment: 0 },
+        { drawdown: 0, dividends: 250000, externalRepayment: 0 },
+        { drawdown: 0, dividends: 250000, externalRepayment: 0 },
+        { drawdown: 0, dividends: 250000, externalRepayment: 0 },
+      ],
+    },
+    {
+      name: "C · Take £1m as dividends up front",
+      note: "No loan. Declare the full £1m as a dividend in year 1 and fund the purchase directly.",
+      otherIncome: 150000,
+      openingLoan: 0,
+      years: [
+        { drawdown: 0, dividends: 1000000, externalRepayment: 0 },
+        blankYear(),
+        blankYear(),
+        blankYear(),
+      ],
+    },
+  ];
+}
+
+function blankScenario() {
+  return {
+    name: "New scenario",
+    note: "",
+    otherIncome: 150000,
+    openingLoan: 0,
+    years: [
+      { drawdown: 0, dividends: 0, externalRepayment: 0 },
+      { drawdown: 0, dividends: 0, externalRepayment: 0 },
+      { drawdown: 0, dividends: 0, externalRepayment: 0 },
+      { drawdown: 0, dividends: 0, externalRepayment: 0 },
+    ],
+  };
+}
+
+/* ---- State --------------------------------------------------------------- */
+let state = loadState();
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.rates && parsed.scenarios) return parsed;
+    }
+  } catch (e) { /* ignore */ }
+  return { rates: defaultRates(), scenarios: exampleScenarios() };
+}
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+}
+
+/* ---- Formatting ---------------------------------------------------------- */
+const gbp = (n) => "£" + Math.round(n || 0).toLocaleString("en-GB");
+const gbp0 = (n) => (n === 0 ? "—" : gbp(n));
+const pct = (n) => (n * 100).toFixed(2).replace(/\.?0+$/, "") + "%";
+const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + gbp(Math.abs(n));
+
+/* ---- Render: assumptions ------------------------------------------------- */
+function renderRates() {
+  document.getElementById("assumptions-year").textContent =
+    "· defaults for " + state.rates.taxYearLabel;
+  const grid = document.getElementById("rates-grid");
+  grid.innerHTML = "";
+  RATE_FIELDS.forEach((f) => {
+    const wrap = document.createElement("label");
+    wrap.className = "field";
+    const val = state.rates[f.key];
+    const display = f.type === "pct" ? (val * 100) : val;
+    const hint = f.hint ? ` <span class="hint">(${f.hint})</span>` : "";
+    const suffix = f.type === "pct" ? "%" : f.type === "money" ? "£" : "";
+    wrap.innerHTML = `
+      <span class="lbl">${f.label}${hint}</span>
+      <input type="${f.type === "text" ? "text" : "number"}"
+             step="${f.type === "pct" ? "0.01" : "any"}"
+             data-rate="${f.key}" data-rtype="${f.type}"
+             value="${f.type === "text" ? val : display}" />`;
+    grid.appendChild(wrap);
+  });
+  grid.querySelectorAll("input").forEach((inp) => {
+    inp.addEventListener("input", (e) => {
+      const key = e.target.dataset.rate;
+      const rtype = e.target.dataset.rtype;
+      if (rtype === "text") state.rates[key] = e.target.value;
+      else if (rtype === "pct") state.rates[key] = (parseFloat(e.target.value) || 0) / 100;
+      else state.rates[key] = parseFloat(e.target.value) || 0;
+      saveState();
+      renderScenarios();
+      renderComparison();
+      document.getElementById("assumptions-year").textContent =
+        "· defaults for " + state.rates.taxYearLabel;
+    });
+  });
+}
+
+/* ---- Render: scenarios --------------------------------------------------- */
+function renderScenarios() {
+  const host = document.getElementById("scenarios");
+  host.innerHTML = "";
+  state.scenarios.forEach((scn, idx) => {
+    host.appendChild(renderScenario(scn, idx));
+  });
+}
+
+function renderScenario(scn, idx) {
+  const r = state.rates;
+  const result = runScenario(scn, r);
+  const root = document.createElement("div");
+  root.className = "scenario";
+
+  /* header */
+  const head = document.createElement("div");
+  head.className = "sc-head";
+  head.innerHTML = `
+    <input class="sc-name" value="${escapeAttr(scn.name)}" data-bind="name" />
+    <button class="small ghost" data-act="dup">Duplicate</button>
+    <button class="small danger" data-act="del">Delete</button>`;
+  root.appendChild(head);
+
+  /* body */
+  const body = document.createElement("div");
+  body.className = "sc-body";
+
+  body.innerHTML = `
+    <div class="grid cols-3" style="margin-bottom:14px">
+      <label class="field"><span class="lbl">Other annual income <span class="hint">(salary etc., before dividends)</span></span>
+        <input type="number" data-bind="otherIncome" value="${scn.otherIncome}" /></label>
+      <label class="field"><span class="lbl">Opening loan balance <span class="hint">(director owes company)</span></span>
+        <input type="number" data-bind="openingLoan" value="${scn.openingLoan}" /></label>
+      <label class="field"><span class="lbl">Note</span>
+        <input type="text" data-bind="note" value="${escapeAttr(scn.note || "")}" /></label>
+    </div>`;
+
+  /* year input table */
+  const yearTbl = document.createElement("div");
+  yearTbl.className = "table-scroll";
+  let yrows = scn.years.map((y, yi) => `
+    <tr data-yi="${yi}">
+      <td>Year ${yi + 1}</td>
+      <td><input type="number" data-yfield="drawdown" value="${y.drawdown}" /></td>
+      <td><input type="number" data-yfield="dividends" value="${y.dividends}" /></td>
+      <td><input type="number" data-yfield="externalRepayment" value="${y.externalRepayment}" /></td>
+      <td class="nowrap muted">${gbp(result.years[yi].closing)}</td>
+      <td><button class="small ghost" data-act="delyear" data-yi="${yi}">✕</button></td>
+    </tr>`).join("");
+  yearTbl.innerHTML = `
+    <table class="data">
+      <thead><tr>
+        <th>Period</th><th>Loan drawdown</th><th>Dividends (credited to loan)</th>
+        <th>External repayment</th><th>Closing loan</th><th></th>
+      </tr></thead>
+      <tbody>${yrows}</tbody>
+    </table>`;
+  body.appendChild(yearTbl);
+
+  const addYearBtn = document.createElement("button");
+  addYearBtn.className = "small";
+  addYearBtn.textContent = "+ Add year";
+  addYearBtn.style.marginTop = "8px";
+  addYearBtn.addEventListener("click", () => {
+    scn.years.push({ drawdown: 0, dividends: 0, externalRepayment: 0 });
+    commit();
+  });
+  body.appendChild(addYearBtn);
+
+  /* summary cards */
+  const cards = document.createElement("div");
+  cards.className = "summary-cards";
+  cards.style.marginTop = "16px";
+  cards.innerHTML = `
+    <div class="card"><div class="k">Permanent tax cost</div>
+      <div class="v perm">${gbp(result.netPermanentCost)}</div>
+      <div class="note">dividend tax + BIK income tax + Class 1A</div></div>
+    <div class="card"><div class="k">Peak S455 (refundable)</div>
+      <div class="v timing">${gbp(result.peakS455)}</div>
+      <div class="note">cash locked up with HMRC at peak</div></div>
+    <div class="card"><div class="k">Total dividends declared</div>
+      <div class="v">${gbp(result.totals.dividends)}</div>
+      <div class="note">div tax ${gbp(result.totals.dividendTax)}</div></div>
+    <div class="card"><div class="k">S455 still outstanding (end)</div>
+      <div class="v">${gbp(result.s455Outstanding)}</div>
+      <div class="note">loan closing ${gbp(result.closingLoan)}</div></div>`;
+  body.appendChild(cards);
+
+  /* detailed per-year results */
+  const detail = document.createElement("details");
+  detail.style.marginTop = "8px";
+  detail.innerHTML = `<summary class="muted" style="cursor:pointer;font-size:13px">Year-by-year breakdown</summary>`;
+  const detTbl = document.createElement("div");
+  detTbl.className = "table-scroll";
+  detTbl.style.marginTop = "8px";
+  let drows = result.years.map((y) => `
+    <tr>
+      <td>Year ${y.year}</td>
+      <td>${gbp(y.closing)}</td>
+      <td>${gbp0(y.bik)}</td>
+      <td>${gbp0(y.bikIncomeTax)}</td>
+      <td>${gbp0(y.class1A)}</td>
+      <td>${gbp0(y.dividendTax)}${y.dividends > 0 ? ` <span class="muted">(${pct(y.effectiveDivRate)})</span>` : ""}</td>
+      <td>${gbp0(y.s455Liab)}</td>
+      <td class="${y.s455Movement > 0 ? "neg" : y.s455Movement < 0 ? "pos" : "muted"}">${y.s455Movement === 0 ? "—" : signed(y.s455Movement)}</td>
+      <td><strong>${gbp(y.permanentCost)}</strong></td>
+    </tr>`).join("");
+  detTbl.innerHTML = `
+    <table class="data">
+      <thead><tr>
+        <th>Period</th><th>Closing loan</th><th>BIK value</th><th>BIK income tax</th>
+        <th>Class 1A</th><th>Dividend tax</th><th>S455 liability</th>
+        <th>S455 cash (+pay/−refund)</th><th>Permanent cost</th>
+      </tr></thead>
+      <tbody>${drows}</tbody>
+      <tfoot><tr>
+        <td>Total</td><td></td><td>${gbp(result.totals.bik)}</td>
+        <td>${gbp(result.totals.bikIncomeTax)}</td><td>${gbp(result.totals.class1A)}</td>
+        <td>${gbp(result.totals.dividendTax)}</td><td></td>
+        <td class="muted">paid ${gbp(result.totals.s455Paid)} / ref ${gbp(result.totals.s455Refunded)}</td>
+        <td>${gbp(result.netPermanentCost)}</td>
+      </tr></tfoot>
+    </table>`;
+  detail.appendChild(detTbl);
+  body.appendChild(detail);
+
+  root.appendChild(body);
+
+  /* ---- wiring ---- */
+  head.querySelector('[data-act="dup"]').addEventListener("click", () => {
+    state.scenarios.splice(idx + 1, 0, JSON.parse(JSON.stringify(scn)));
+    state.scenarios[idx + 1].name = scn.name + " (copy)";
+    commit();
+  });
+  head.querySelector('[data-act="del"]').addEventListener("click", () => {
+    if (state.scenarios.length <= 1) { alert("Keep at least one scenario."); return; }
+    state.scenarios.splice(idx, 1);
+    commit();
+  });
+
+  root.querySelectorAll("[data-bind]").forEach((inp) => {
+    inp.addEventListener("input", (e) => {
+      const field = e.target.dataset.bind;
+      if (field === "name" || field === "note") scn[field] = e.target.value;
+      else scn[field] = parseFloat(e.target.value) || 0;
+      saveState();
+      // Light re-render: name/note don't need a full recompute, numbers do.
+      if (field !== "name" && field !== "note") refreshScenarioInPlace(root, scn);
+      renderComparison();
+    });
+  });
+
+  root.querySelectorAll("[data-yfield]").forEach((inp) => {
+    inp.addEventListener("input", (e) => {
+      const tr = e.target.closest("tr");
+      const yi = parseInt(tr.dataset.yi, 10);
+      scn.years[yi][e.target.dataset.yfield] = parseFloat(e.target.value) || 0;
+      saveState();
+      refreshScenarioInPlace(root, scn);
+      renderComparison();
+    });
+  });
+
+  root.querySelectorAll('[data-act="delyear"]').forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const yi = parseInt(e.target.dataset.yi, 10);
+      if (scn.years.length <= 1) { alert("Keep at least one year."); return; }
+      scn.years.splice(yi, 1);
+      commit();
+    });
+  });
+
+  return root;
+}
+
+/* Re-run + repaint a scenario's computed cells without rebuilding inputs
+ * (so the user's cursor/focus is preserved while typing). */
+function refreshScenarioInPlace(root, scn) {
+  const fresh = renderScenario(scn, state.scenarios.indexOf(scn));
+  root.querySelector(".summary-cards").replaceWith(fresh.querySelector(".summary-cards"));
+  root.querySelector("details").replaceWith(fresh.querySelector("details"));
+  // update closing-loan column
+  const result = runScenario(scn, state.rates);
+  root.querySelectorAll("tbody tr[data-yi]").forEach((tr) => {
+    const yi = parseInt(tr.dataset.yi, 10);
+    const cell = tr.children[4];
+    if (cell && result.years[yi]) cell.textContent = gbp(result.years[yi].closing);
+  });
+}
+
+/* ---- Render: comparison table + chart ------------------------------------ */
+function renderComparison() {
+  const r = state.rates;
+  const results = state.scenarios.map((s) => runScenario(s, r));
+  const tbl = document.getElementById("compare");
+
+  const minPerm = Math.min(...results.map((x) => x.netPermanentCost));
+  const minTotal = Math.min(...results.map((x) => x.netPermanentCost + x.s455Outstanding));
+
+  let header = "<thead><tr><th>Scenario</th>";
+  results.forEach((x) => { header += `<th>${escapeHtml(x.name)}</th>`; });
+  header += "</tr></thead>";
+
+  const rows = [
+    ["Total dividends declared", (x) => gbp(x.totals.dividends)],
+    ["Dividend tax", (x) => gbp(x.totals.dividendTax)],
+    ["BIK income tax", (x) => gbp(x.totals.bikIncomeTax)],
+    ["Employer Class 1A NIC", (x) => gbp(x.totals.class1A)],
+    ["Permanent tax cost", (x) => gbp(x.netPermanentCost), (x) => x.netPermanentCost === minPerm],
+    ["Peak S455 (cash locked up)", (x) => gbp(x.peakS455)],
+    ["S455 outstanding at end", (x) => gbp(x.s455Outstanding)],
+    ["Permanent + S455 still locked", (x) => gbp(x.netPermanentCost + x.s455Outstanding), (x) => (x.netPermanentCost + x.s455Outstanding) === minTotal],
+  ];
+
+  let bodyHtml = "<tbody>";
+  rows.forEach(([label, fn, best]) => {
+    bodyHtml += `<tr><td>${label}</td>`;
+    results.forEach((x) => {
+      const isBest = best && best(x);
+      bodyHtml += `<td class="${isBest ? "best" : ""}">${fn(x)}</td>`;
+    });
+    bodyHtml += "</tr>";
+  });
+  bodyHtml += "</tbody>";
+
+  tbl.innerHTML = header + bodyHtml;
+  drawChart(results);
+}
+
+/* ---- Canvas chart: grouped bars (permanent cost vs S455 locked up) ------- */
+function drawChart(results) {
+  const canvas = document.getElementById("chart");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const padL = 70, padR = 20, padT = 30, padB = 64;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const series = results.map((x) => ({
+    name: x.name,
+    perm: x.netPermanentCost,
+    s455: x.s455Outstanding,
+    peak: x.peakS455,
+  }));
+  const maxVal = Math.max(1, ...series.map((s) => Math.max(s.perm + s.s455, s.peak)));
+  // round axis up to a nice number
+  const niceMax = niceCeil(maxVal);
+
+  // axes
+  ctx.strokeStyle = "#dde3ea";
+  ctx.fillStyle = "#5d6b7a";
+  ctx.font = "11px -apple-system, Segoe UI, Roboto, sans-serif";
+  ctx.lineWidth = 1;
+  const ticks = 5;
+  for (let i = 0; i <= ticks; i++) {
+    const v = (niceMax / ticks) * i;
+    const y = padT + plotH - (v / niceMax) * plotH;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    ctx.fillText("£" + shortNum(v), padL - 8, y);
+  }
+
+  const n = series.length;
+  const groupW = plotW / n;
+  const barW = Math.min(70, groupW * 0.5);
+
+  series.forEach((s, i) => {
+    const cx = padL + groupW * i + groupW / 2;
+    const x = cx - barW / 2;
+    // stacked: permanent (red) + S455 outstanding (blue) on top
+    const permH = (s.perm / niceMax) * plotH;
+    const s455H = (s.s455 / niceMax) * plotH;
+    const baseY = padT + plotH;
+
+    ctx.fillStyle = "#b3261e";
+    ctx.fillRect(x, baseY - permH, barW, permH);
+    ctx.fillStyle = "#0b5a8a";
+    ctx.fillRect(x, baseY - permH - s455H, barW, s455H);
+
+    // peak S455 marker (hollow outline) to show cash locked up at peak
+    const peakH = (s.peak / niceMax) * plotH;
+    ctx.strokeStyle = "#1f9d7a";
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x - 4, baseY - peakH);
+    ctx.lineTo(x + barW + 4, baseY - peakH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // total label
+    ctx.fillStyle = "#1c2733";
+    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+    ctx.font = "bold 11px -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.fillText("£" + shortNum(s.perm + s.s455), cx, baseY - permH - s455H - 4);
+
+    // x label (wrapped)
+    ctx.fillStyle = "#5d6b7a";
+    ctx.font = "11px -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.textBaseline = "top";
+    wrapLabel(ctx, s.name, cx, baseY + 8, groupW - 6, 13);
+  });
+
+  // legend
+  const legend = [
+    ["#b3261e", "Permanent tax cost"],
+    ["#0b5a8a", "S455 outstanding at end"],
+    ["#1f9d7a", "Peak S455 (cash locked up)"],
+  ];
+  let lx = padL;
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  legend.forEach(([c, t]) => {
+    ctx.fillStyle = c; ctx.fillRect(lx, 12, 12, 12);
+    ctx.fillStyle = "#1c2733"; ctx.fillText(t, lx + 17, 18);
+    lx += ctx.measureText(t).width + 46;
+  });
+}
+
+function niceCeil(v) {
+  const mag = Math.pow(10, Math.floor(Math.log10(v)));
+  const norm = v / mag;
+  const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+  return step * mag;
+}
+function shortNum(v) {
+  if (v >= 1e6) return (v / 1e6).toFixed(v % 1e6 === 0 ? 0 : 2) + "m";
+  if (v >= 1e3) return (v / 1e3).toFixed(v % 1e3 === 0 ? 0 : 0) + "k";
+  return String(Math.round(v));
+}
+function wrapLabel(ctx, text, cx, y, maxW, lh) {
+  const words = text.split(" ");
+  let line = "", lines = [];
+  words.forEach((w) => {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+    else line = test;
+  });
+  if (line) lines.push(line);
+  lines.slice(0, 3).forEach((l, i) => ctx.fillText(l, cx, y + i * lh));
+}
+
+/* ---- Helpers ------------------------------------------------------------- */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+function commit() {
+  saveState();
+  renderScenarios();
+  renderComparison();
+}
+
+function renderAll() {
+  renderRates();
+  renderScenarios();
+  renderComparison();
+}
+
+/* ---- Toolbar ------------------------------------------------------------- */
+document.getElementById("btn-add").addEventListener("click", () => {
+  state.scenarios.push(blankScenario());
+  commit();
+});
+document.getElementById("btn-example").addEventListener("click", () => {
+  state.scenarios = exampleScenarios();
+  commit();
+});
+document.getElementById("btn-reset").addEventListener("click", () => {
+  if (!confirm("Reset all assumptions and scenarios to defaults?")) return;
+  state = { rates: defaultRates(), scenarios: exampleScenarios() };
+  saveState();
+  renderAll();
+});
+document.getElementById("btn-print").addEventListener("click", () => window.print());
+
+renderAll();
