@@ -299,6 +299,27 @@ textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--bran
   text-decoration: none;
 }
 .menu-chip:hover { background: var(--soft); border-color: var(--brand); }
+.menu-chip.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+/* Floating back-to-top button */
+.to-top {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(20, 40, 60, .25);
+  cursor: pointer;
+}
+.to-top:hover { background: var(--brand-dark); }
+.to-top[hidden] { display: none; }
 
 #checklist-table td { vertical-align: middle; }
 #checklist-table .done td:nth-child(2) { text-decoration: line-through; color: var(--muted); }
@@ -357,7 +378,7 @@ textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--bran
 }
 
 @media print {
-  .toolbar, .disclaimer button, button, .topnav, details.panel:not([open]) { display: none !important; }
+  .toolbar, .disclaimer button, button, .topnav, .to-top, details.panel:not([open]) { display: none !important; }
   body { background: #fff; }
   .panel { box-shadow: none; break-inside: avoid; }
   header.app-header { background: var(--brand-dark) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }

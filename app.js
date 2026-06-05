@@ -1033,12 +1033,50 @@ function jumpTo(id) {
 
 function renderToolkit() { renderMenu(); renderChecklist(); }
 
+let _scrollSpy = null;
 function renderMenu() {
   document.getElementById("topnav-chips").innerHTML =
     MENU.map((m) => `<a class="menu-chip" data-jump="${m.id}">${m.label}</a>`).join("");
   document.querySelectorAll("#topnav-chips [data-jump]").forEach((a) =>
     a.addEventListener("click", () => jumpTo(a.dataset.jump)));
+  setupScrollSpy();
 }
+
+/* Highlight the chip for the section currently in view, and keep it visible in
+ * the horizontally-scrolling bar. */
+function setupScrollSpy() {
+  if (_scrollSpy) _scrollSpy.disconnect();
+  const nav = document.querySelector(".topnav-chips");
+  const chips = {};
+  document.querySelectorAll("#topnav-chips [data-jump]").forEach((a) => { chips[a.dataset.jump] = a; });
+  const targets = MENU.map((m) => document.getElementById(m.id)).filter(Boolean);
+  if (!targets.length) return;
+
+  _scrollSpy = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      Object.values(chips).forEach((c) => c.classList.remove("active"));
+      const chip = chips[e.target.id];
+      if (!chip) return;
+      chip.classList.add("active");
+      // scroll the bar horizontally (not the page) so the active chip is in view
+      const navRect = nav.getBoundingClientRect();
+      const chipRect = chip.getBoundingClientRect();
+      nav.scrollLeft += (chipRect.left - navRect.left) - 14;
+    });
+  }, { rootMargin: "-64px 0px -70% 0px", threshold: 0 });
+  targets.forEach((t) => _scrollSpy.observe(t));
+}
+
+/* Back-to-top button: appears once you've scrolled down. */
+(function initTopButton() {
+  const btn = document.getElementById("to-top");
+  if (!btn) return;
+  const onScroll = () => { btn.hidden = window.scrollY < 320; };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  btn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  onScroll();
+})();
 
 function updateChecklistProgress() {
   const done = CHECKLIST.filter((it) => (state.checklist[it.key] || {}).done).length;
@@ -1135,6 +1173,23 @@ function buildClientEmail() {
   L.push("REVIEW THE FIGURES / MODEL CLEARING THE LOAN DOWN");
   L.push("You can review all of the figures, change any of the assumptions, and model how to clear the director's loan down here:");
   L.push(TOOL_URL, "");
+
+  // Planning checklist — include any options that have been ticked, given a
+  // status other than the default, or annotated.
+  const cl = state.checklist || {};
+  const reviewed = CHECKLIST
+    .map((it) => ({ it, s: cl[it.key] || {} }))
+    .filter((x) => x.s.done || (x.s.status && x.s.status !== "Relevant") || (x.s.note && x.s.note.trim()));
+  if (reviewed.length) {
+    L.push("PLANNING OPTIONS REVIEWED");
+    reviewed.forEach(({ it, s }) => {
+      const mark = s.done ? "[x]" : "[ ]";
+      const status = s.status && s.status !== "Relevant" ? ` — ${s.status}` : (s.done ? " — considered" : "");
+      const note = s.note && s.note.trim() ? ` (${s.note.trim()})` : "";
+      L.push(`  ${mark} ${it.label}${status}${note}`);
+    });
+    L.push("");
+  }
 
   L.push("These figures are estimates to support our planning conversation and are not formal tax advice; we will confirm the final numbers before anything is actioned.", "");
   L.push("Kind regards,", sender);
