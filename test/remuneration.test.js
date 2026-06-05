@@ -7,6 +7,7 @@ const { defaultRates } = require("../engine.js");
 const {
   employeeNIC, employerNIC, corporationTax, marginalCtRate, ctReliefFraction,
   personExtraction, splitDividends, runRemuneration, optimiseRemuneration,
+  useOfHomeRent,
 } = require("../remuneration.js");
 
 let passed = 0;
@@ -109,5 +110,20 @@ const solo = {
 const optSolo = optimiseRemuneration(solo, r);
 ok(opt.best.totals.valueDelivered > optSolo.best.totals.valueDelivered + 100,
    "two active shareholders deliver more net than one");
+
+/* ---- Use of home rent --------------------------------------------------- */
+// Rent set equal to allowable costs: nil rental profit, nil personal tax,
+// and the company still gets CT relief on the whole rent.
+const rentNil = useOfHomeRent({ rent: 6000, allowableCosts: 6000, otherIncome: 50000, companyProfit: 100000, associated: 1 }, r);
+approx(rentNil.rentalProfit, 0, 0.01, "rent = costs gives nil rental profit");
+approx(rentNil.incomeTax, 0, 0.01, "nil rental profit means nil personal tax");
+approx(rentNil.effectiveRate, 0, 1e-6, "rent matched to costs extracts at 0% personal tax");
+approx(rentNil.ctRelief, 6000 * 0.265, 1, "company gets CT relief on the whole rent (marginal 26.5%)");
+
+// Rent above costs for a higher-rate director: profit taxed at 40%.
+const rentProfit = useOfHomeRent({ rent: 10000, allowableCosts: 4000, otherIncome: 60000, companyProfit: 100000, associated: 1 }, r);
+approx(rentProfit.rentalProfit, 6000, 0.01, "rental profit = rent - allowable costs");
+approx(rentProfit.incomeTax, 6000 * r.incomeHigher, 1, "rental profit taxed at the higher rate for a higher-rate director");
+ok(rentProfit.netToDirector > 0 && rentProfit.netToDirector < rentProfit.rent, "net to director is rent less personal tax");
 
 console.log(`\n✓ All ${passed} remuneration assertions passed.`);
