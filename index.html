@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dividend &amp; Director's Loan (S455) Planner</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Dividend &amp; Director's Loan (S455) Planner</h1>
+    <p>
+      Model and compare the tax cost of funding a withdrawal through a director's loan
+      (with S455 and benefit-in-kind exposure) versus declaring dividends — including the
+      higher-rate / additional-rate bands, the personal allowance taper, and the knock-on
+      tax when dividends are taken to fund a tax bill.
+    </p>
+  </header>
+
+  <div class="wrap">
+    <div class="disclaimer">
+      <strong>Planning aid, not tax advice.</strong> Figures are estimates to support a
+      client conversation. All rates are editable in <em>Assumptions</em> and default to the
+      <strong>2026/27</strong> tax year — verify against current HMRC guidance before relying on
+      them. The HMRC official rate of interest is now reviewed quarterly.
+    </div>
+
+    <div class="toolbar">
+      <button class="primary" id="btn-add">+ Add scenario</button>
+      <button id="btn-example">Load worked example (Spanish property)</button>
+      <button id="btn-reset" class="ghost">Reset to defaults</button>
+      <span class="spacer"></span>
+      <button id="btn-print">🖨 Print / Save PDF</button>
+    </div>
+
+    <!-- ASSUMPTIONS ------------------------------------------------------- -->
+    <details class="panel" id="assumptions">
+      <summary>Assumptions &amp; tax rates <span class="sub" id="assumptions-year"></span></summary>
+      <div class="panel-body">
+        <p class="muted" style="margin-top:0">
+          Defaults are for <strong>2026/27</strong>. Edit any figure for a different year or
+          to use the official rate of interest applicable to the period in question.
+        </p>
+        <div class="grid cols-4" id="rates-grid"></div>
+      </div>
+    </details>
+
+    <!-- SCENARIOS --------------------------------------------------------- -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Scenarios</h2>
+        <span class="sub">Build one row per year. Dividends are credited to the loan account (reducing the S455 balance); external repayments are cash from elsewhere (e.g. selling a property).</span>
+      </div>
+      <div class="panel-body" id="scenarios"></div>
+    </div>
+
+    <!-- COMPARISON -------------------------------------------------------- -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Comparison</h2>
+        <span class="sub">Permanent tax cost is money gone for good. S455 is refundable once the loan is cleared — a cash-flow / timing cost.</span>
+      </div>
+      <div class="panel-body">
+        <div class="table-scroll">
+          <table class="data compare-table" id="compare"></table>
+        </div>
+        <div style="margin-top:18px">
+          <canvas id="chart" width="1100" height="340" aria-label="Cost comparison chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- GUIDANCE ---------------------------------------------------------- -->
+    <div class="panel">
+      <div class="panel-head"><h2>HMRC guidance &amp; legislation</h2></div>
+      <div class="panel-body">
+        <div class="links-grid">
+          <div class="link-card">
+            <h3>S455 — loans to participators</h3>
+            <ul>
+              <li><a href="https://www.gov.uk/directors-loans" target="_blank" rel="noopener">GOV.UK — Director's loans (overview)</a></li>
+              <li><a href="https://www.gov.uk/directors-loans/you-owe-your-company-money" target="_blank" rel="noopener">GOV.UK — If you owe your company money (S455 charge)</a></li>
+              <li><a href="https://www.gov.uk/hmrc-internal-manuals/company-taxation-manual/ctm61505" target="_blank" rel="noopener">HMRC Company Taxation Manual — CTM61505 (loans to participators: general)</a></li>
+              <li><a href="https://www.gov.uk/hmrc-internal-manuals/company-taxation-manual/ctm61600" target="_blank" rel="noopener">HMRC CTM61600 — relief for the charge (repayment / s458)</a></li>
+              <li class="leg">Legislation: <a href="https://www.legislation.gov.uk/ukpga/2010/4/section/455" target="_blank" rel="noopener">s455 CTA 2010</a> · <a href="https://www.legislation.gov.uk/ukpga/2010/4/section/458" target="_blank" rel="noopener">s458 CTA 2010 (relief on repayment)</a></li>
+            </ul>
+          </div>
+          <div class="link-card">
+            <h3>Benefit in kind — beneficial (cheap) loans</h3>
+            <ul>
+              <li><a href="https://www.gov.uk/expenses-and-benefits-loans-provided-to-employees" target="_blank" rel="noopener">GOV.UK — Loans provided to employees / directors</a></li>
+              <li><a href="https://www.gov.uk/government/publications/rates-and-allowances-beneficial-loan-arrangements-hmrc-official-rates/beneficial-loan-arrangements-hmrc-official-rates" target="_blank" rel="noopener">GOV.UK — Official rate of interest (current &amp; historic)</a></li>
+              <li><a href="https://www.gov.uk/hmrc-internal-manuals/employment-income-manual/eim26101" target="_blank" rel="noopener">HMRC Employment Income Manual — EIM26101 (beneficial loans)</a></li>
+              <li><a href="https://www.gov.uk/guidance/480-expenses-and-benefits-a-tax-guide" target="_blank" rel="noopener">HMRC 480 expenses &amp; benefits guide (Ch. 17 — loans)</a></li>
+              <li class="leg">Legislation: <a href="https://www.legislation.gov.uk/ukpga/2003/1/section/175" target="_blank" rel="noopener">s175 ITEPA 2003 (taxable cheap loans)</a></li>
+            </ul>
+          </div>
+          <div class="link-card">
+            <h3>Dividends</h3>
+            <ul>
+              <li><a href="https://www.gov.uk/tax-on-dividends" target="_blank" rel="noopener">GOV.UK — Tax on dividends (rates &amp; allowance)</a></li>
+              <li><a href="https://www.gov.uk/hmrc-internal-manuals/savings-and-investment-manual/saim5040" target="_blank" rel="noopener">HMRC SAIM5040 — dividend nil-rate band</a></li>
+              <li class="leg">Legislation: <a href="https://www.legislation.gov.uk/ukpga/2007/3/section/8" target="_blank" rel="noopener">s8 ITA 2007 (dividend rates)</a></li>
+            </ul>
+          </div>
+          <div class="link-card">
+            <h3>Personal allowance &amp; Class 1A NIC</h3>
+            <ul>
+              <li><a href="https://www.gov.uk/income-tax-rates/income-over-100000" target="_blank" rel="noopener">GOV.UK — Personal allowance taper (income over £100k)</a></li>
+              <li><a href="https://www.gov.uk/government/publications/cwg5-class-1a-national-insurance-contributions-on-benefits-in-kind" target="_blank" rel="noopener">GOV.UK — CWG5: Class 1A NIC on benefits in kind</a></li>
+              <li><a href="https://www.gov.uk/expenses-and-benefits-loans-provided-to-employees/whats-exempt" target="_blank" rel="noopener">GOV.UK — £10,000 beneficial loan exemption</a></li>
+              <li class="leg">Legislation: <a href="https://www.legislation.gov.uk/ukpga/2007/3/section/35" target="_blank" rel="noopener">s35 ITA 2007 (personal allowance &amp; taper)</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>How the comparison works</h2></div>
+      <div class="panel-body" style="font-size:13.5px">
+        <ul style="margin-top:0">
+          <li><strong>Permanent cost</strong> = dividend tax + income tax on the loan benefit-in-kind + employer Class 1A NIC. This money never comes back.</li>
+          <li><strong>S455</strong> = 35.75% (2026/27) of the loan still outstanding 9 months and 1 day after the company year end. It is <em>refunded</em> under s458 once the loan is repaid, so it is a cash-flow / timing cost, not a permanent one — shown separately.</li>
+          <li><strong>Benefit in kind</strong> applies whenever the loan exceeds £10,000 at any point in the year. It is taxed on the average balance at the official rate of interest as employment income (so it stacks on salary), and the company pays Class 1A NIC on it.</li>
+          <li><strong>Tax on tax:</strong> if a dividend is declared to fund a tax bill, that dividend is itself taxed — model it by entering the gross dividend needed. For an additional-rate payer there is no rate saving from spreading dividends (all at 39.35%), so declaring dividends purely to clear a refundable S455 charge can be the most expensive route.</li>
+          <li><strong>Bands &amp; allowance:</strong> the model applies the personal allowance taper (£1 lost per £2 over £100k) using adjusted net income, and taxes dividends across the ordinary / upper / additional bands on top of other income.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    Built for client dividend-planning discussions · figures are estimates · verify against HMRC before acting.
+  </footer>
+
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
