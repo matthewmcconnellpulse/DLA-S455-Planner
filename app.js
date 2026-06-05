@@ -13,6 +13,8 @@ const TOOL_URL = "https://matthewmcconnellpulse.github.io/DLA-S455-Planner/";
 /* ---- Planning menu (jump links) ------------------------------------------ */
 const MENU = [
   { id: "remun-panel", label: "Remuneration optimiser" },
+  { id: "pension-panel", label: "Pension" },
+  { id: "ev-panel", label: "Electric car" },
   { id: "homerent-panel", label: "Use of home" },
   { id: "childemp-panel", label: "Employ children" },
   { id: "rlp-panel", label: "Relevant Life Plan" },
@@ -25,8 +27,9 @@ const MENU = [
 /* ---- Planning checklist (tickable options) ------------------------------- */
 const CHECKLIST = [
   { key: "salary", label: "Optimal salary / dividend mix", target: "remun-panel" },
-  { key: "pension", label: "Employer pension contributions", target: "remun-panel" },
+  { key: "pension", label: "Pension contributions (allowance / carry-forward)", target: "pension-panel" },
   { key: "split", label: "Split dividends with spouse / family", target: "remun-panel" },
+  { key: "evcar", label: "Electric company car", target: "ev-panel" },
   { key: "useofhome", label: "Use of home (rent to company)", target: "homerent-panel" },
   { key: "children", label: "Employ children (13+)", target: "childemp-panel" },
   { key: "rlp", label: "Relevant Life Plan (life cover)", target: "rlp-panel" },
@@ -80,6 +83,10 @@ const RATE_FIELDS = [
   { key: "ctMainRate", label: "CT main rate", type: "pct", group: "Corporation tax" },
   { key: "ctMarginalLower", label: "CT lower limit", type: "money", group: "Corporation tax" },
   { key: "ctMarginalUpper", label: "CT upper limit", type: "money", group: "Corporation tax" },
+  { key: "pensionAnnualAllowance", label: "Pension annual allowance", type: "money", group: "Pension" },
+  { key: "pensionThresholdIncome", label: "Taper — threshold income", type: "money", group: "Pension" },
+  { key: "pensionTaperThreshold", label: "Taper — adjusted income", type: "money", group: "Pension" },
+  { key: "pensionMinAllowance", label: "Tapered allowance floor", type: "money", group: "Pension" },
 ];
 
 /* ---- Worked example: the Spanish-property client ------------------------- */
@@ -178,6 +185,12 @@ function defaultChildEmp() {
 function defaultRLP() {
   return { premium: 1200, directorOtherIncome: 120000, companyProfit: 100000, associated: 1 };
 }
+function defaultEV() {
+  return { listPrice: 50000, bikPercent: 4, directorOtherIncome: 60000, companyProfit: 100000, associated: 1, carCost: 50000, purchased: true, petrolBikPercent: 37 };
+}
+function defaultPension() {
+  return { adjustedIncome: 150000, thresholdIncome: 150000, contribution: 60000, carryForward: 0, companyProfit: 100000, associated: 1, employerContribution: true };
+}
 
 /* ---- State --------------------------------------------------------------- */
 let state = loadState();
@@ -204,13 +217,15 @@ function loadState() {
         if (!parsed.homeRent) parsed.homeRent = defaultHomeRent();
         if (!parsed.childEmp) parsed.childEmp = defaultChildEmp();
         if (!parsed.rlp) parsed.rlp = defaultRLP();
+        if (!parsed.ev) parsed.ev = defaultEV();
+        if (!parsed.pension) parsed.pension = defaultPension();
         if (!parsed.karbon) parsed.karbon = { proxyUrl: "", passphrase: "" };
         parsed.checklist = Object.assign(defaultChecklist(), parsed.checklist || {});
         return parsed;
       }
     }
   } catch (e) { /* ignore */ }
-  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), karbon: { proxyUrl: "", passphrase: "" }, checklist: defaultChecklist() };
+  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), ev: defaultEV(), pension: defaultPension(), karbon: { proxyUrl: "", passphrase: "" }, checklist: defaultChecklist() };
 }
 
 function saveState() {
@@ -258,6 +273,8 @@ function renderRates() {
       renderHomeRentResults();
       renderChildEmpResults();
       renderRLPResults();
+      renderEVResults();
+      renderPensionResults();
       document.getElementById("assumptions-year").textContent =
         "· defaults for " + state.rates.taxYearLabel;
     });
@@ -733,6 +750,8 @@ function renderAll() {
   renderHomeRent();
   renderChildEmp();
   renderRLP();
+  renderEV();
+  renderPension();
   renderScenarios();
   renderComparison();
 }
@@ -1119,6 +1138,75 @@ function renderChecklist() {
   });
 }
 
+/* ---- Electric company car ------------------------------------------------ */
+function renderEV() { renderEVInputs(); renderEVResults(); }
+function renderEVInputs() {
+  const x = state.ev;
+  document.getElementById("ev-inputs").innerHTML = `
+    <label class="field"><span class="lbl">List price (P11D)</span><input type="number" data-ev="listPrice" value="${x.listPrice}" /></label>
+    <label class="field"><span class="lbl">EV benefit % <span class="hint">(4 = 2026/27)</span></span><input type="number" step="0.1" data-ev="bikPercent" value="${x.bikPercent}" /></label>
+    <label class="field"><span class="lbl">Director's other income</span><input type="number" data-ev="directorOtherIncome" value="${x.directorOtherIncome}" /></label>
+    <label class="field"><span class="lbl">Company taxable profit</span><input type="number" data-ev="companyProfit" value="${x.companyProfit}" /></label>
+    <label class="field"><span class="lbl">Car cost <span class="hint">(for 100% FYA)</span></span><input type="number" data-ev="carCost" value="${x.carCost}" /></label>
+    <label class="field"><span class="lbl">Associated companies</span><input type="number" data-ev="associated" value="${x.associated}" /></label>
+    <label class="field"><span class="lbl">Petrol % <span class="hint">(for comparison)</span></span><input type="number" step="0.1" data-ev="petrolBikPercent" value="${x.petrolBikPercent}" /></label>
+    <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-ev="purchased" ${x.purchased ? "checked" : ""}/> Purchased new (100% FYA)</label></label>`;
+  document.querySelectorAll("#ev-inputs [data-ev]").forEach((inp) =>
+    inp.addEventListener(inp.type === "checkbox" ? "change" : "input", (e) => {
+      const k = e.target.dataset.ev;
+      state.ev[k] = e.target.type === "checkbox" ? e.target.checked : (parseFloat(e.target.value) || 0);
+      saveState(); renderEVResults();
+    }));
+}
+function renderEVResults() {
+  const x = state.ev;
+  const res = evCompanyCar({ ...x, bikPercent: x.bikPercent / 100, petrolBikPercent: x.petrolBikPercent / 100 }, state.rates);
+  const cards = `<div class="summary-cards">
+    ${remunCard("Taxable benefit", gbp(res.benefit), pct(res.bikPct) + " of list price")}
+    ${remunCard("Employee income tax / yr", gbp(res.employeeTax), "at " + pct(res.marginalRate) + " marginal", "perm")}
+    ${remunCard("Annual tax cost of the car", gbp(res.annualTaxCost), "employee tax + employer NIC net of CT", "timing")}
+    ${remunCard("Year-1 CT relief (FYA)", gbp(res.fyaRelief), res.purchased ? "100% of cost at " + pct(res.ctRate) : "leased — n/a")}
+  </div>`;
+  const insight = res.petrolBenefit > 0
+    ? `<p class="muted" style="font-size:12.5px;margin-top:12px">An equivalent petrol car at ${pct(res.petrolPct)} would carry a ${gbp(res.petrolBenefit)} benefit and cost about <strong>${gbp(res.petrolAnnualTaxCost)}</strong> a year in tax — so the EV saves roughly <strong>${gbp(res.savingVsPetrol)}</strong> a year, on top of the ${gbp(res.fyaRelief)} first-year CT relief.</p>`
+    : "";
+  document.getElementById("ev-results").innerHTML = cards + insight;
+}
+
+/* ---- Pension allowance & carry-forward ----------------------------------- */
+function renderPension() { renderPensionInputs(); renderPensionResults(); }
+function renderPensionInputs() {
+  const x = state.pension;
+  document.getElementById("pension-inputs").innerHTML = `
+    <label class="field"><span class="lbl">Adjusted income <span class="hint">(incl. employer conts)</span></span><input type="number" data-pn="adjustedIncome" value="${x.adjustedIncome}" /></label>
+    <label class="field"><span class="lbl">Threshold income <span class="hint">(excl. pension)</span></span><input type="number" data-pn="thresholdIncome" value="${x.thresholdIncome}" /></label>
+    <label class="field"><span class="lbl">Proposed contribution</span><input type="number" data-pn="contribution" value="${x.contribution}" /></label>
+    <label class="field"><span class="lbl">Carry-forward available <span class="hint">(prior 3 yrs)</span></span><input type="number" data-pn="carryForward" value="${x.carryForward}" /></label>
+    <label class="field"><span class="lbl">Company taxable profit</span><input type="number" data-pn="companyProfit" value="${x.companyProfit}" /></label>
+    <label class="field"><span class="lbl">Associated companies</span><input type="number" data-pn="associated" value="${x.associated}" /></label>
+    <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pn="employerContribution" ${x.employerContribution ? "checked" : ""}/> Employer contribution (CT relief)</label></label>`;
+  document.querySelectorAll("#pension-inputs [data-pn]").forEach((inp) =>
+    inp.addEventListener(inp.type === "checkbox" ? "change" : "input", (e) => {
+      const k = e.target.dataset.pn;
+      state.pension[k] = e.target.type === "checkbox" ? e.target.checked : (parseFloat(e.target.value) || 0);
+      saveState(); renderPensionResults();
+    }));
+}
+function renderPensionResults() {
+  const res = pensionAllowance(state.pension, state.rates);
+  const tapered = res.tapered < res.standardAA;
+  const cards = `<div class="summary-cards">
+    ${remunCard("Annual allowance", gbp(res.tapered), tapered ? "tapered from " + gbp(res.standardAA) : "standard")}
+    ${remunCard("Available this year", gbp(res.available), "incl. " + gbp(res.carryForward) + " carry-forward")}
+    ${remunCard(res.excess > 0 ? "Excess over allowance" : "Headroom left", gbp(res.excess > 0 ? res.excess : res.headroom), res.excess > 0 ? "AA charge at " + pct(res.marginalRate) : "unused allowance", res.excess > 0 ? "perm" : "timing")}
+    ${remunCard("CT relief on contribution", gbp(res.ctRelief), res.ctRelief > 0 ? "employer, at " + pct(res.ctRate) : "personal — relief via SA")}
+  </div>`;
+  const insight = res.excess > 0
+    ? `<p class="muted" style="font-size:12.5px;margin-top:12px">The ${gbp(res.contribution)} contribution exceeds the ${gbp(res.available)} available by <strong>${gbp(res.excess)}</strong>, triggering an annual-allowance charge of about <strong>${gbp(res.aaCharge)}</strong>. Reduce the contribution or use more carry-forward.</p>`
+    : `<p class="muted" style="font-size:12.5px;margin-top:12px">The ${gbp(res.contribution)} contribution is within the ${gbp(res.available)} available${res.ctRelief > 0 ? `, and as an employer contribution saves <strong>${gbp(res.ctRelief)}</strong> in corporation tax` : ""}. ${gbp(res.headroom)} of allowance remains.</p>`;
+  document.getElementById("pension-results").innerHTML = cards + insight;
+}
+
 /* ---- Client email -------------------------------------------------------- */
 /* Builds a plain-English email summarising the modelled scenarios, spelling out
  * the key caveat — that clearing a director's loan with a future dividend is
@@ -1326,7 +1414,7 @@ document.getElementById("btn-example").addEventListener("click", () => {
 });
 document.getElementById("btn-reset").addEventListener("click", () => {
   if (!confirm("Reset all assumptions and scenarios to defaults?")) return;
-  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), karbon: state.karbon || { proxyUrl: "", passphrase: "" }, checklist: defaultChecklist() };
+  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), ev: defaultEV(), pension: defaultPension(), karbon: state.karbon || { proxyUrl: "", passphrase: "" }, checklist: defaultChecklist() };
   saveState();
   renderAll();
 });

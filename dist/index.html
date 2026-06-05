@@ -561,6 +561,47 @@ textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--bran
       </div>
     </details>
 
+    <!-- ELECTRIC COMPANY CAR ---------------------------------------------- -->
+    <details class="panel" id="ev-panel">
+      <summary>Electric company car <span class="sub">— ultra-low BIK vs funding a car personally</span></summary>
+      <div class="panel-body">
+        <p class="muted" style="margin-top:0;font-size:12.5px">
+          A pure electric car has a very low taxable benefit (list price × a small appropriate
+          percentage — 4% for 2026/27, rising a little each year), so providing it through the
+          company is far cheaper than buying an equivalent car from taxed income. A new EV also
+          usually attracts a <strong>100% first-year capital allowance</strong>.
+        </p>
+        <div class="grid cols-4" id="ev-inputs"></div>
+        <div id="ev-results" style="margin-top:16px"></div>
+        <p class="muted" style="font-size:12px;margin-top:12px">
+          Enter the appropriate percentage for the year (EV: 4% in 2026/27, 5% 2027/28, then rising).
+          The petrol % is just for comparison. VAT on the purchase is usually irrecoverable if there's
+          any private use. Planning aid, not advice.
+        </p>
+      </div>
+    </details>
+
+    <!-- PENSION DEEP-DIVE ------------------------------------------------- -->
+    <details class="panel" id="pension-panel">
+      <summary>Pension allowance &amp; carry-forward <span class="sub">— annual allowance, taper and 3-year carry-forward</span></summary>
+      <div class="panel-body">
+        <p class="muted" style="margin-top:0;font-size:12.5px">
+          Works out how much can be paid into a pension this year: the £60,000 annual allowance, the
+          <strong>tapered</strong> allowance for high earners (adjusted income over £260k, threshold
+          income over £200k), plus unused allowance <strong>carried forward</strong> from the previous
+          three years. Employer contributions are corporation-tax deductible.
+        </p>
+        <div class="grid cols-4" id="pension-inputs"></div>
+        <div id="pension-results" style="margin-top:16px"></div>
+        <p class="muted" style="font-size:12px;margin-top:12px">
+          Threshold income broadly excludes pension contributions; adjusted income broadly includes
+          employer contributions. Carry-forward requires having been a pension scheme member in those
+          years. The money-purchase annual allowance (if flexibly accessed) isn't modelled here.
+          Planning aid, not advice.
+        </p>
+      </div>
+    </details>
+
     <!-- SCENARIOS --------------------------------------------------------- -->
     <div class="panel" id="dla-panel">
       <div class="panel-head">
@@ -789,6 +830,12 @@ function defaultRates() {
     ctMainRate: 0.25,             // main rate (profits at/above the upper limit)
     ctMarginalLower: 50000,       // lower limit (divided by number of associated companies)
     ctMarginalUpper: 250000,      // upper limit (marginal relief applies between the two)
+
+    // Pension annual allowance (used by the pension deep-dive)
+    pensionAnnualAllowance: 60000, // standard annual allowance
+    pensionThresholdIncome: 200000, // taper only bites if threshold income exceeds this
+    pensionTaperThreshold: 260000,  // adjusted income above which the AA is tapered
+    pensionMinAllowance: 10000,     // floor of the tapered annual allowance
 
     // Stamp Duty Land Tax (England & NI only — overseas purchases are outside SDLT)
     sdltBands: [
@@ -1532,11 +1579,92 @@ function relevantLifePlan(input, r) {
   };
 }
 
+/* ---------------------------------------------------------------------------
+ * Electric company car. A pure EV has a very low taxable benefit (list price ×
+ * a small appropriate percentage), so providing it through the company is far
+ * cheaper than funding an equivalent car from taxed income. A new EV also
+ * usually attracts a 100% first-year capital allowance.
+ *
+ * input = { listPrice, bikPercent, directorOtherIncome, companyProfit,
+ *           associated, carCost, purchased, petrolBikPercent }
+ * ------------------------------------------------------------------------- */
+function evCompanyCar(input, r) {
+  const listPrice = Math.max(0, input.listPrice || 0);
+  const bikPct = Math.max(0, input.bikPercent || 0);
+  const other = Math.max(0, input.directorOtherIncome || 0);
+  const ctRate = marginalCtRate(input.companyProfit || 0, input.associated || 1, r);
+  const carCost = input.carCost != null ? Math.max(0, input.carCost) : listPrice;
+  const purchased = input.purchased !== false;
+  const petrolPct = Math.max(0, input.petrolBikPercent || 0);
+
+  const probe = 2000;
+  const marginalRate = (_computeTax(other + probe, 0, r).total - _computeTax(other, 0, r).total) / probe;
+
+  const benefit = listPrice * bikPct;
+  const employeeTax = benefit * marginalRate;
+  const class1A = benefit * r.class1ARate;
+  const class1ANet = class1A * (1 - ctRate);
+  const annualTaxCost = employeeTax + class1ANet;
+  const fyaRelief = purchased ? carCost * ctRate : 0;
+
+  const petrolBenefit = listPrice * petrolPct;
+  const petrolEmployeeTax = petrolBenefit * marginalRate;
+  const petrolClass1ANet = petrolBenefit * r.class1ARate * (1 - ctRate);
+  const petrolAnnualTaxCost = petrolEmployeeTax + petrolClass1ANet;
+
+  return {
+    listPrice, bikPct, benefit, marginalRate, ctRate,
+    employeeTax, class1A, class1ANet, annualTaxCost,
+    fyaRelief, purchased, carCost,
+    petrolPct, petrolBenefit, petrolAnnualTaxCost,
+    savingVsPetrol: petrolAnnualTaxCost - annualTaxCost,
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * Pension annual allowance: the standard allowance, the tapered allowance for
+ * high earners, and carry-forward of unused allowance from the previous 3 years.
+ *
+ * input = { adjustedIncome, thresholdIncome, contribution, carryForward,
+ *           companyProfit, associated, employerContribution }
+ * ------------------------------------------------------------------------- */
+function pensionAllowance(input, r) {
+  const adjusted = Math.max(0, input.adjustedIncome || 0);
+  const threshold = Math.max(0, input.thresholdIncome || 0);
+  const contribution = Math.max(0, input.contribution || 0);
+  const carry = Math.max(0, input.carryForward || 0);
+
+  let tapered = r.pensionAnnualAllowance;
+  if (threshold > r.pensionThresholdIncome && adjusted > r.pensionTaperThreshold) {
+    const reduction = Math.floor((adjusted - r.pensionTaperThreshold) / 2);
+    tapered = Math.max(r.pensionMinAllowance, r.pensionAnnualAllowance - reduction);
+  }
+
+  const available = tapered + carry;
+  const within = Math.min(contribution, available);
+  const excess = Math.max(0, contribution - available);
+
+  const ctRate = marginalCtRate(input.companyProfit || 0, input.associated || 1, r);
+  const ctRelief = input.employerContribution !== false ? contribution * ctRate : 0;
+
+  // Annual allowance charge on any excess, at the marginal income-tax rate.
+  const probe = 2000;
+  const marginalRate = (_computeTax(adjusted + probe, 0, r).total - _computeTax(adjusted, 0, r).total) / probe;
+  const aaCharge = excess * marginalRate;
+
+  return {
+    standardAA: r.pensionAnnualAllowance, tapered, carryForward: carry,
+    available, contribution, within, excess,
+    ctRate, ctRelief, marginalRate, aaCharge,
+    headroom: available - contribution,
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     employeeNIC, employerNIC, corporationTax, marginalCtRate, ctReliefFraction,
     personExtraction, splitDividends, runRemuneration, optimiseRemuneration,
-    useOfHomeRent, childEmployment, relevantLifePlan,
+    useOfHomeRent, childEmployment, relevantLifePlan, evCompanyCar, pensionAllowance,
   };
 }
 
@@ -1557,6 +1685,8 @@ const TOOL_URL = "https://matthewmcconnellpulse.github.io/DLA-S455-Planner/";
 /* ---- Planning menu (jump links) ------------------------------------------ */
 const MENU = [
   { id: "remun-panel", label: "Remuneration optimiser" },
+  { id: "pension-panel", label: "Pension" },
+  { id: "ev-panel", label: "Electric car" },
   { id: "homerent-panel", label: "Use of home" },
   { id: "childemp-panel", label: "Employ children" },
   { id: "rlp-panel", label: "Relevant Life Plan" },
@@ -1569,8 +1699,9 @@ const MENU = [
 /* ---- Planning checklist (tickable options) ------------------------------- */
 const CHECKLIST = [
   { key: "salary", label: "Optimal salary / dividend mix", target: "remun-panel" },
-  { key: "pension", label: "Employer pension contributions", target: "remun-panel" },
+  { key: "pension", label: "Pension contributions (allowance / carry-forward)", target: "pension-panel" },
   { key: "split", label: "Split dividends with spouse / family", target: "remun-panel" },
+  { key: "evcar", label: "Electric company car", target: "ev-panel" },
   { key: "useofhome", label: "Use of home (rent to company)", target: "homerent-panel" },
   { key: "children", label: "Employ children (13+)", target: "childemp-panel" },
   { key: "rlp", label: "Relevant Life Plan (life cover)", target: "rlp-panel" },
@@ -1624,6 +1755,10 @@ const RATE_FIELDS = [
   { key: "ctMainRate", label: "CT main rate", type: "pct", group: "Corporation tax" },
   { key: "ctMarginalLower", label: "CT lower limit", type: "money", group: "Corporation tax" },
   { key: "ctMarginalUpper", label: "CT upper limit", type: "money", group: "Corporation tax" },
+  { key: "pensionAnnualAllowance", label: "Pension annual allowance", type: "money", group: "Pension" },
+  { key: "pensionThresholdIncome", label: "Taper — threshold income", type: "money", group: "Pension" },
+  { key: "pensionTaperThreshold", label: "Taper — adjusted income", type: "money", group: "Pension" },
+  { key: "pensionMinAllowance", label: "Tapered allowance floor", type: "money", group: "Pension" },
 ];
 
 /* ---- Worked example: the Spanish-property client ------------------------- */
@@ -1722,6 +1857,12 @@ function defaultChildEmp() {
 function defaultRLP() {
   return { premium: 1200, directorOtherIncome: 120000, companyProfit: 100000, associated: 1 };
 }
+function defaultEV() {
+  return { listPrice: 50000, bikPercent: 4, directorOtherIncome: 60000, companyProfit: 100000, associated: 1, carCost: 50000, purchased: true, petrolBikPercent: 37 };
+}
+function defaultPension() {
+  return { adjustedIncome: 150000, thresholdIncome: 150000, contribution: 60000, carryForward: 0, companyProfit: 100000, associated: 1, employerContribution: true };
+}
 
 /* ---- State --------------------------------------------------------------- */
 let state = loadState();
@@ -1748,13 +1889,15 @@ function loadState() {
         if (!parsed.homeRent) parsed.homeRent = defaultHomeRent();
         if (!parsed.childEmp) parsed.childEmp = defaultChildEmp();
         if (!parsed.rlp) parsed.rlp = defaultRLP();
+        if (!parsed.ev) parsed.ev = defaultEV();
+        if (!parsed.pension) parsed.pension = defaultPension();
         if (!parsed.karbon) parsed.karbon = { proxyUrl: "", passphrase: "" };
         parsed.checklist = Object.assign(defaultChecklist(), parsed.checklist || {});
         return parsed;
       }
     }
   } catch (e) { /* ignore */ }
-  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), karbon: { proxyUrl: "", passphrase: "" }, checklist: defaultChecklist() };
+  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), ev: defaultEV(), pension: defaultPension(), karbon: { proxyUrl: "", passphrase: "" }, checklist: defaultChecklist() };
 }
 
 function saveState() {
@@ -1802,6 +1945,8 @@ function renderRates() {
       renderHomeRentResults();
       renderChildEmpResults();
       renderRLPResults();
+      renderEVResults();
+      renderPensionResults();
       document.getElementById("assumptions-year").textContent =
         "· defaults for " + state.rates.taxYearLabel;
     });
@@ -2277,6 +2422,8 @@ function renderAll() {
   renderHomeRent();
   renderChildEmp();
   renderRLP();
+  renderEV();
+  renderPension();
   renderScenarios();
   renderComparison();
 }
@@ -2663,6 +2810,75 @@ function renderChecklist() {
   });
 }
 
+/* ---- Electric company car ------------------------------------------------ */
+function renderEV() { renderEVInputs(); renderEVResults(); }
+function renderEVInputs() {
+  const x = state.ev;
+  document.getElementById("ev-inputs").innerHTML = `
+    <label class="field"><span class="lbl">List price (P11D)</span><input type="number" data-ev="listPrice" value="${x.listPrice}" /></label>
+    <label class="field"><span class="lbl">EV benefit % <span class="hint">(4 = 2026/27)</span></span><input type="number" step="0.1" data-ev="bikPercent" value="${x.bikPercent}" /></label>
+    <label class="field"><span class="lbl">Director's other income</span><input type="number" data-ev="directorOtherIncome" value="${x.directorOtherIncome}" /></label>
+    <label class="field"><span class="lbl">Company taxable profit</span><input type="number" data-ev="companyProfit" value="${x.companyProfit}" /></label>
+    <label class="field"><span class="lbl">Car cost <span class="hint">(for 100% FYA)</span></span><input type="number" data-ev="carCost" value="${x.carCost}" /></label>
+    <label class="field"><span class="lbl">Associated companies</span><input type="number" data-ev="associated" value="${x.associated}" /></label>
+    <label class="field"><span class="lbl">Petrol % <span class="hint">(for comparison)</span></span><input type="number" step="0.1" data-ev="petrolBikPercent" value="${x.petrolBikPercent}" /></label>
+    <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-ev="purchased" ${x.purchased ? "checked" : ""}/> Purchased new (100% FYA)</label></label>`;
+  document.querySelectorAll("#ev-inputs [data-ev]").forEach((inp) =>
+    inp.addEventListener(inp.type === "checkbox" ? "change" : "input", (e) => {
+      const k = e.target.dataset.ev;
+      state.ev[k] = e.target.type === "checkbox" ? e.target.checked : (parseFloat(e.target.value) || 0);
+      saveState(); renderEVResults();
+    }));
+}
+function renderEVResults() {
+  const x = state.ev;
+  const res = evCompanyCar({ ...x, bikPercent: x.bikPercent / 100, petrolBikPercent: x.petrolBikPercent / 100 }, state.rates);
+  const cards = `<div class="summary-cards">
+    ${remunCard("Taxable benefit", gbp(res.benefit), pct(res.bikPct) + " of list price")}
+    ${remunCard("Employee income tax / yr", gbp(res.employeeTax), "at " + pct(res.marginalRate) + " marginal", "perm")}
+    ${remunCard("Annual tax cost of the car", gbp(res.annualTaxCost), "employee tax + employer NIC net of CT", "timing")}
+    ${remunCard("Year-1 CT relief (FYA)", gbp(res.fyaRelief), res.purchased ? "100% of cost at " + pct(res.ctRate) : "leased — n/a")}
+  </div>`;
+  const insight = res.petrolBenefit > 0
+    ? `<p class="muted" style="font-size:12.5px;margin-top:12px">An equivalent petrol car at ${pct(res.petrolPct)} would carry a ${gbp(res.petrolBenefit)} benefit and cost about <strong>${gbp(res.petrolAnnualTaxCost)}</strong> a year in tax — so the EV saves roughly <strong>${gbp(res.savingVsPetrol)}</strong> a year, on top of the ${gbp(res.fyaRelief)} first-year CT relief.</p>`
+    : "";
+  document.getElementById("ev-results").innerHTML = cards + insight;
+}
+
+/* ---- Pension allowance & carry-forward ----------------------------------- */
+function renderPension() { renderPensionInputs(); renderPensionResults(); }
+function renderPensionInputs() {
+  const x = state.pension;
+  document.getElementById("pension-inputs").innerHTML = `
+    <label class="field"><span class="lbl">Adjusted income <span class="hint">(incl. employer conts)</span></span><input type="number" data-pn="adjustedIncome" value="${x.adjustedIncome}" /></label>
+    <label class="field"><span class="lbl">Threshold income <span class="hint">(excl. pension)</span></span><input type="number" data-pn="thresholdIncome" value="${x.thresholdIncome}" /></label>
+    <label class="field"><span class="lbl">Proposed contribution</span><input type="number" data-pn="contribution" value="${x.contribution}" /></label>
+    <label class="field"><span class="lbl">Carry-forward available <span class="hint">(prior 3 yrs)</span></span><input type="number" data-pn="carryForward" value="${x.carryForward}" /></label>
+    <label class="field"><span class="lbl">Company taxable profit</span><input type="number" data-pn="companyProfit" value="${x.companyProfit}" /></label>
+    <label class="field"><span class="lbl">Associated companies</span><input type="number" data-pn="associated" value="${x.associated}" /></label>
+    <label class="field" style="align-self:end"><label style="font-weight:600;font-size:12.5px"><input type="checkbox" data-pn="employerContribution" ${x.employerContribution ? "checked" : ""}/> Employer contribution (CT relief)</label></label>`;
+  document.querySelectorAll("#pension-inputs [data-pn]").forEach((inp) =>
+    inp.addEventListener(inp.type === "checkbox" ? "change" : "input", (e) => {
+      const k = e.target.dataset.pn;
+      state.pension[k] = e.target.type === "checkbox" ? e.target.checked : (parseFloat(e.target.value) || 0);
+      saveState(); renderPensionResults();
+    }));
+}
+function renderPensionResults() {
+  const res = pensionAllowance(state.pension, state.rates);
+  const tapered = res.tapered < res.standardAA;
+  const cards = `<div class="summary-cards">
+    ${remunCard("Annual allowance", gbp(res.tapered), tapered ? "tapered from " + gbp(res.standardAA) : "standard")}
+    ${remunCard("Available this year", gbp(res.available), "incl. " + gbp(res.carryForward) + " carry-forward")}
+    ${remunCard(res.excess > 0 ? "Excess over allowance" : "Headroom left", gbp(res.excess > 0 ? res.excess : res.headroom), res.excess > 0 ? "AA charge at " + pct(res.marginalRate) : "unused allowance", res.excess > 0 ? "perm" : "timing")}
+    ${remunCard("CT relief on contribution", gbp(res.ctRelief), res.ctRelief > 0 ? "employer, at " + pct(res.ctRate) : "personal — relief via SA")}
+  </div>`;
+  const insight = res.excess > 0
+    ? `<p class="muted" style="font-size:12.5px;margin-top:12px">The ${gbp(res.contribution)} contribution exceeds the ${gbp(res.available)} available by <strong>${gbp(res.excess)}</strong>, triggering an annual-allowance charge of about <strong>${gbp(res.aaCharge)}</strong>. Reduce the contribution or use more carry-forward.</p>`
+    : `<p class="muted" style="font-size:12.5px;margin-top:12px">The ${gbp(res.contribution)} contribution is within the ${gbp(res.available)} available${res.ctRelief > 0 ? `, and as an employer contribution saves <strong>${gbp(res.ctRelief)}</strong> in corporation tax` : ""}. ${gbp(res.headroom)} of allowance remains.</p>`;
+  document.getElementById("pension-results").innerHTML = cards + insight;
+}
+
 /* ---- Client email -------------------------------------------------------- */
 /* Builds a plain-English email summarising the modelled scenarios, spelling out
  * the key caveat — that clearing a director's loan with a future dividend is
@@ -2870,7 +3086,7 @@ document.getElementById("btn-example").addEventListener("click", () => {
 });
 document.getElementById("btn-reset").addEventListener("click", () => {
   if (!confirm("Reset all assumptions and scenarios to defaults?")) return;
-  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), karbon: state.karbon || { proxyUrl: "", passphrase: "" }, checklist: defaultChecklist() };
+  state = { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" }, remun: defaultRemun(), homeRent: defaultHomeRent(), childEmp: defaultChildEmp(), rlp: defaultRLP(), ev: defaultEV(), pension: defaultPension(), karbon: state.karbon || { proxyUrl: "", passphrase: "" }, checklist: defaultChecklist() };
   saveState();
   renderAll();
 });

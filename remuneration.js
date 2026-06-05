@@ -377,10 +377,91 @@ function relevantLifePlan(input, r) {
   };
 }
 
+/* ---------------------------------------------------------------------------
+ * Electric company car. A pure EV has a very low taxable benefit (list price ×
+ * a small appropriate percentage), so providing it through the company is far
+ * cheaper than funding an equivalent car from taxed income. A new EV also
+ * usually attracts a 100% first-year capital allowance.
+ *
+ * input = { listPrice, bikPercent, directorOtherIncome, companyProfit,
+ *           associated, carCost, purchased, petrolBikPercent }
+ * ------------------------------------------------------------------------- */
+function evCompanyCar(input, r) {
+  const listPrice = Math.max(0, input.listPrice || 0);
+  const bikPct = Math.max(0, input.bikPercent || 0);
+  const other = Math.max(0, input.directorOtherIncome || 0);
+  const ctRate = marginalCtRate(input.companyProfit || 0, input.associated || 1, r);
+  const carCost = input.carCost != null ? Math.max(0, input.carCost) : listPrice;
+  const purchased = input.purchased !== false;
+  const petrolPct = Math.max(0, input.petrolBikPercent || 0);
+
+  const probe = 2000;
+  const marginalRate = (_computeTax(other + probe, 0, r).total - _computeTax(other, 0, r).total) / probe;
+
+  const benefit = listPrice * bikPct;
+  const employeeTax = benefit * marginalRate;
+  const class1A = benefit * r.class1ARate;
+  const class1ANet = class1A * (1 - ctRate);
+  const annualTaxCost = employeeTax + class1ANet;
+  const fyaRelief = purchased ? carCost * ctRate : 0;
+
+  const petrolBenefit = listPrice * petrolPct;
+  const petrolEmployeeTax = petrolBenefit * marginalRate;
+  const petrolClass1ANet = petrolBenefit * r.class1ARate * (1 - ctRate);
+  const petrolAnnualTaxCost = petrolEmployeeTax + petrolClass1ANet;
+
+  return {
+    listPrice, bikPct, benefit, marginalRate, ctRate,
+    employeeTax, class1A, class1ANet, annualTaxCost,
+    fyaRelief, purchased, carCost,
+    petrolPct, petrolBenefit, petrolAnnualTaxCost,
+    savingVsPetrol: petrolAnnualTaxCost - annualTaxCost,
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * Pension annual allowance: the standard allowance, the tapered allowance for
+ * high earners, and carry-forward of unused allowance from the previous 3 years.
+ *
+ * input = { adjustedIncome, thresholdIncome, contribution, carryForward,
+ *           companyProfit, associated, employerContribution }
+ * ------------------------------------------------------------------------- */
+function pensionAllowance(input, r) {
+  const adjusted = Math.max(0, input.adjustedIncome || 0);
+  const threshold = Math.max(0, input.thresholdIncome || 0);
+  const contribution = Math.max(0, input.contribution || 0);
+  const carry = Math.max(0, input.carryForward || 0);
+
+  let tapered = r.pensionAnnualAllowance;
+  if (threshold > r.pensionThresholdIncome && adjusted > r.pensionTaperThreshold) {
+    const reduction = Math.floor((adjusted - r.pensionTaperThreshold) / 2);
+    tapered = Math.max(r.pensionMinAllowance, r.pensionAnnualAllowance - reduction);
+  }
+
+  const available = tapered + carry;
+  const within = Math.min(contribution, available);
+  const excess = Math.max(0, contribution - available);
+
+  const ctRate = marginalCtRate(input.companyProfit || 0, input.associated || 1, r);
+  const ctRelief = input.employerContribution !== false ? contribution * ctRate : 0;
+
+  // Annual allowance charge on any excess, at the marginal income-tax rate.
+  const probe = 2000;
+  const marginalRate = (_computeTax(adjusted + probe, 0, r).total - _computeTax(adjusted, 0, r).total) / probe;
+  const aaCharge = excess * marginalRate;
+
+  return {
+    standardAA: r.pensionAnnualAllowance, tapered, carryForward: carry,
+    available, contribution, within, excess,
+    ctRate, ctRelief, marginalRate, aaCharge,
+    headroom: available - contribution,
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     employeeNIC, employerNIC, corporationTax, marginalCtRate, ctReliefFraction,
     personExtraction, splitDividends, runRemuneration, optimiseRemuneration,
-    useOfHomeRent, childEmployment, relevantLifePlan,
+    useOfHomeRent, childEmployment, relevantLifePlan, evCompanyCar, pensionAllowance,
   };
 }

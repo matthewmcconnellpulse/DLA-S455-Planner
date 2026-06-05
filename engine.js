@@ -68,6 +68,12 @@ function defaultRates() {
     ctMarginalLower: 50000,       // lower limit (divided by number of associated companies)
     ctMarginalUpper: 250000,      // upper limit (marginal relief applies between the two)
 
+    // Pension annual allowance (used by the pension deep-dive)
+    pensionAnnualAllowance: 60000, // standard annual allowance
+    pensionThresholdIncome: 200000, // taper only bites if threshold income exceeds this
+    pensionTaperThreshold: 260000,  // adjusted income above which the AA is tapered
+    pensionMinAllowance: 10000,     // floor of the tapered annual allowance
+
     // Stamp Duty Land Tax (England & NI only — overseas purchases are outside SDLT)
     sdltBands: [
       { upper: 125000, rate: 0 },
