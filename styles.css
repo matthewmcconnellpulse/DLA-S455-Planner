@@ -210,6 +210,44 @@ footer.app-footer { color: var(--muted); font-size: 12px; padding: 24px; text-al
 .plan-row .plan-actions { margin-left: auto; display: flex; gap: 6px; }
 .cloud-status { margin-top: 10px; font-size: 12.5px; min-height: 1em; }
 
+/* Email modal */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(20, 40, 60, .45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal-overlay[hidden] { display: none; }
+.modal {
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(20, 40, 60, .28);
+  width: 100%; max-width: 720px;
+  max-height: 90vh;
+  display: flex; flex-direction: column;
+}
+.modal-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line); background: #fbfcfe;
+}
+.modal-head h2 { margin: 0; font-size: 16px; flex: 1; }
+.modal-body { padding: 18px; overflow-y: auto; }
+.modal-foot {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; border-top: 1px solid var(--line); background: #fbfcfe;
+}
+.modal-foot .spacer { flex: 1; }
+textarea#email-body {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #fff;
+  resize: vertical;
+}
+textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--brand); }
+
 .muted { color: var(--muted); }
 .right { text-align: right; }
 .nowrap { white-space: nowrap; }

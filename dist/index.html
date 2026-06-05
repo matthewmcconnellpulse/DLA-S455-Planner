@@ -217,6 +217,44 @@ footer.app-footer { color: var(--muted); font-size: 12px; padding: 24px; text-al
 .plan-row .plan-actions { margin-left: auto; display: flex; gap: 6px; }
 .cloud-status { margin-top: 10px; font-size: 12.5px; min-height: 1em; }
 
+/* Email modal */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(20, 40, 60, .45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal-overlay[hidden] { display: none; }
+.modal {
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(20, 40, 60, .28);
+  width: 100%; max-width: 720px;
+  max-height: 90vh;
+  display: flex; flex-direction: column;
+}
+.modal-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line); background: #fbfcfe;
+}
+.modal-head h2 { margin: 0; font-size: 16px; flex: 1; }
+.modal-body { padding: 18px; overflow-y: auto; }
+.modal-foot {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; border-top: 1px solid var(--line); background: #fbfcfe;
+}
+.modal-foot .spacer { flex: 1; }
+textarea#email-body {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #fff;
+  resize: vertical;
+}
+textarea#email-body:focus { outline: 2px solid #bcd9ee; border-color: var(--brand); }
+
 .muted { color: var(--muted); }
 .right { text-align: right; }
 .nowrap { white-space: nowrap; }
@@ -264,6 +302,7 @@ footer.app-footer { color: var(--muted); font-size: 12px; padding: 24px; text-al
       <button class="primary" id="btn-add">+ Add scenario</button>
       <button id="btn-example">Load worked example (Spanish property)</button>
       <button id="btn-reset" class="ghost">Reset to defaults</button>
+      <button id="btn-email">✉ Draft client email</button>
       <span class="spacer"></span>
       <button id="btn-print">🖨 Print / Save PDF</button>
     </div>
@@ -361,6 +400,40 @@ footer.app-footer { color: var(--muted); font-size: 12px; padding: 24px; text-al
           <li><strong>Tax on tax:</strong> if a dividend is declared to fund a tax bill, that dividend is itself taxed — model it by entering the gross dividend needed. For an additional-rate payer there is no rate saving from spreading dividends (all at 39.35%), so declaring dividends purely to clear a refundable S455 charge can be the most expensive route.</li>
           <li><strong>Bands &amp; allowance:</strong> the model applies the personal allowance taper (£1 lost per £2 over £100k) using adjusted net income, and taxes dividends across the ordinary / upper / additional bands on top of other income.</li>
         </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMAIL MODAL ------------------------------------------------------- -->
+  <div class="modal-overlay" id="email-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="email-modal-title">
+      <div class="modal-head">
+        <h2 id="email-modal-title">Draft client email</h2>
+        <button class="small ghost" id="email-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted" style="margin-top:0;font-size:12.5px">
+          A plain-English summary of the scenarios above, including the caveat that clearing a
+          director's loan with a future dividend is taxable, and a link to this tool. Edit anything
+          below, then copy it or open it in your email app.
+        </p>
+        <div class="grid cols-2" style="margin-bottom:12px">
+          <label class="field"><span class="lbl">Client name</span>
+            <input type="text" id="email-client" placeholder="e.g. Jane" /></label>
+          <label class="field"><span class="lbl">Your name / sign-off</span>
+            <input type="text" id="email-sender" placeholder="e.g. Matthew, Pulse Accountants" /></label>
+        </div>
+        <label class="field"><span class="lbl">Subject</span>
+          <input type="text" id="email-subject" /></label>
+        <label class="field" style="margin-top:10px">
+          <span class="lbl">Email body <span class="hint">(editable)</span></span>
+          <textarea id="email-body" rows="18"></textarea></label>
+      </div>
+      <div class="modal-foot">
+        <button class="primary" id="email-copy">Copy to clipboard</button>
+        <button id="email-mailto">Open in email app</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="email-close2">Close</button>
       </div>
     </div>
   </div>
@@ -754,6 +827,9 @@ if (typeof module !== "undefined" && module.exports) {
 
 const STORAGE_KEY = "dla-s455-planner-v1";
 
+// Live home of this tool — included in the client email so they can open it.
+const TOOL_URL = "https://matthewmcconnellpulse.github.io/DLA-S455-Planner/";
+
 /* ---- Rate metadata: drives the editable Assumptions panel ---------------- */
 const RATE_FIELDS = [
   { key: "taxYearLabel", label: "Tax year", type: "text", group: "General" },
@@ -867,11 +943,12 @@ function loadState() {
         // Merge any new default rate keys (e.g. CGT/SDLT added in a later version)
         parsed.rates = Object.assign(defaultRates(), parsed.rates);
         parsed.scenarios.forEach(normaliseScenario);
+        if (!parsed.emailMeta) parsed.emailMeta = { client: "", sender: "" };
         return parsed;
       }
     }
   } catch (e) { /* ignore */ }
-  return { rates: defaultRates(), scenarios: exampleScenarios() };
+  return { rates: defaultRates(), scenarios: exampleScenarios(), emailMeta: { client: "", sender: "" } };
 }
 
 function saveState() {
@@ -1339,6 +1416,117 @@ function renderAll() {
   renderScenarios();
   renderComparison();
 }
+
+/* ---- Client email -------------------------------------------------------- */
+/* Builds a plain-English email summarising the modelled scenarios, spelling out
+ * the key caveat — that clearing a director's loan with a future dividend is
+ * itself taxable — and linking to this tool so the client can explore / clear
+ * the loan down. Returns { subject, body }. */
+function buildClientEmail() {
+  const r = state.rates;
+  const results = state.scenarios.map((s) => runScenario(s, r));
+  const meta = state.emailMeta || { client: "", sender: "" };
+  const client = (meta.client || "").trim() || "[client name]";
+  const sender = (meta.sender || "").trim() || "[your name]";
+
+  // Headline figure = the largest total new borrowing across the scenarios.
+  const totalDrawdown = (scn) => (scn.years || []).reduce((t, y) => t + (y.drawdown || 0), 0);
+  const headline = Math.max(0, ...state.scenarios.map(totalDrawdown));
+  const amountPhrase = headline > 0 ? `the ${gbp(headline)} withdrawal` : "the withdrawal";
+
+  // "Lowest cost once the loan is eventually cleared" = non-refundable + S455 still locked up.
+  const trueCost = (x) => x.totalNonRefundable + x.s455Outstanding;
+  let best = results[0];
+  results.forEach((x) => { if (trueCost(x) < trueCost(best)) best = x; });
+
+  const L = [];
+  L.push(`Dear ${client},`, "");
+  L.push(`Thank you for your time. Following our discussion, here is a summary of the options we modelled for funding ${amountPhrase} — comparing taking the money out of the company as a director's loan against declaring it as dividends.`, "");
+
+  L.push("SUMMARY OF THE OPTIONS");
+  results.forEach((x) => {
+    L.push(`• ${x.name}`);
+    L.push(`    - Permanent tax cost: ${gbp(x.netPermanentCost)} (dividend tax + benefit-in-kind income tax + employer Class 1A NIC)`);
+    if (x.transactionTaxes > 0) {
+      L.push(`    - One-off SDLT/CGT on the property transaction: ${gbp(x.transactionTaxes)}`);
+    }
+    if (x.peakS455 > 0) {
+      L.push(`    - S455 charge at its peak (refundable once the loan is repaid): ${gbp(x.peakS455)}`);
+    }
+    let total = `    - Total non-refundable cost: ${gbp(x.totalNonRefundable)}`;
+    if (x.s455Outstanding > 0) {
+      total += `, with a further ${gbp(x.s455Outstanding)} of S455 still locked up with HMRC at the end`;
+    }
+    L.push(total);
+  });
+  L.push("");
+  if (results.length > 1) {
+    L.push(`On these figures, the lowest overall cost is "${best.name}".`, "");
+  }
+
+  L.push("THE IMPORTANT CAVEAT WITH THE DIRECTOR'S LOAN ROUTE");
+  L.push(`Taking the money as a director's loan looks cheaper up front: the only immediate tax is the S455 charge — currently ${pct(r.s455Rate)} of the balance still outstanding nine months and a day after the company year end — and that charge is refundable once the loan is repaid, plus a small benefit-in-kind cost on the cheap loan.`, "");
+  L.push("However, the loan still has to be repaid. If you later clear it by declaring a dividend (rather than repaying it from another source, such as the sale of a property), that dividend is itself taxable in the year it is declared, at the dividend rates then in force. In other words, a director's loan defers the dividend tax — it does not remove it: the tax falls due when the loan is eventually cleared with a dividend. For an additional-rate taxpayer there is no rate saving from spreading the dividends over several years, so clearing a loan this way can end up being the most expensive route overall.", "");
+
+  L.push("REVIEW THE FIGURES / MODEL CLEARING THE LOAN DOWN");
+  L.push("You can review all of the figures, change any of the assumptions, and model how to clear the director's loan down here:");
+  L.push(TOOL_URL, "");
+
+  L.push("These figures are estimates to support our planning conversation and are not formal tax advice; we will confirm the final numbers before anything is actioned.", "");
+  L.push("Kind regards,", sender);
+
+  return { subject: "Funding options: director's loan vs dividends", body: L.join("\n") };
+}
+
+const emailModal = () => document.getElementById("email-modal");
+function regenEmail() {
+  const { subject, body } = buildClientEmail();
+  document.getElementById("email-subject").value = subject;
+  document.getElementById("email-body").value = body;
+}
+function openEmailModal() {
+  const meta = state.emailMeta || { client: "", sender: "" };
+  document.getElementById("email-client").value = meta.client || "";
+  document.getElementById("email-sender").value = meta.sender || "";
+  regenEmail();
+  emailModal().hidden = false;
+}
+function closeEmailModal() { emailModal().hidden = true; }
+
+document.getElementById("btn-email").addEventListener("click", openEmailModal);
+document.getElementById("email-close").addEventListener("click", closeEmailModal);
+document.getElementById("email-close2").addEventListener("click", closeEmailModal);
+emailModal().addEventListener("click", (e) => { if (e.target === emailModal()) closeEmailModal(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !emailModal().hidden) closeEmailModal();
+});
+["email-client", "email-sender"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", (e) => {
+    if (!state.emailMeta) state.emailMeta = { client: "", sender: "" };
+    state.emailMeta[id === "email-client" ? "client" : "sender"] = e.target.value;
+    saveState();
+    regenEmail();
+  });
+});
+document.getElementById("email-copy").addEventListener("click", async () => {
+  const btn = document.getElementById("email-copy");
+  const body = document.getElementById("email-body").value;
+  try {
+    await navigator.clipboard.writeText(body);
+    const old = btn.textContent;
+    btn.textContent = "Copied ✓";
+    setTimeout(() => { btn.textContent = old; }, 1500);
+  } catch (e) {
+    const ta = document.getElementById("email-body");
+    ta.focus(); ta.select();
+    alert("Press Ctrl/Cmd + C to copy the selected text.");
+  }
+});
+document.getElementById("email-mailto").addEventListener("click", () => {
+  const subject = document.getElementById("email-subject").value;
+  const body = document.getElementById("email-body").value;
+  window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+});
 
 /* ---- Toolbar ------------------------------------------------------------- */
 document.getElementById("btn-add").addEventListener("click", () => {
