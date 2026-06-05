@@ -1,0 +1,38 @@
+name: Deploy to GitHub Pages
+
+# Publishes the planner as a static site. The repo's files (index.html, engine.js,
+# app.js, styles.css) are served from the root — no build needed.
+#
+# ONE-TIME SETUP (cannot be done via API): in the repo go to
+#   Settings → Pages → Build and deployment → Source: "GitHub Actions"
+# Pages also requires the repo to be public, OR a paid GitHub plan (Pro/Team/Enterprise)
+# for private repos. Once enabled, every push to main redeploys automatically.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: "."
+      - id: deployment
+        uses: actions/deploy-pages@v4
